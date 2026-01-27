@@ -21,7 +21,7 @@ websites, please open an issue.
 
 - Import posts into Mealie with a link and a click
 - [iOS Shortcut v0.3](https://www.icloud.com/shortcuts/3778d926ed794dca95e658c6a4b5cf11) for easy importing
-- PWA for Android sent to feature
+- PWA for "share" feature on Android
 
 ## Screenshot
 
