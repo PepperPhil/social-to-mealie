@@ -77,7 +77,7 @@ export default function ShareImportRunner({
   return (
     <>
       {/* Manuelles AutoImport beibehalten (falls du es brauchst), aber es ist jetzt nicht mehr zwingend */}
-      <AutoImport onImport={startImport} />
+      <AutoImport onImport={startImport} sharedUrl={sharedUrl} autostart={autostart} />
 
       {status !== 'idle' && (
         <div className="mt-4 w-fit min-w-96 rounded-md border p-3 text-sm">
