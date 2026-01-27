@@ -19,10 +19,25 @@ export async function POST(req: Request) {
   }
 
   // Wir leiten auf die Startseite weiter und geben URL + autostart mit.
-  const u = new URL('/', req.url);
+  const host = req.headers.get('x-forwarded-host') ?? req.headers.get('host');
+  const proto = req.headers.get('x-forwarded-proto') ?? 'https';
+  
+  if (!host) {
+    return NextResponse.redirect(new URL('/?error=no_host', req.url), 303);
+  }
+  
+  const base = `${proto}://${host}`;
+  const u = new URL('/', base);
+  
   u.searchParams.set('url', sharedUrl);
   u.searchParams.set('autostart', '1');
+  
   return NextResponse.redirect(u, 303);
+  
+  // const u = new URL('/', req.url);
+  // u.searchParams.set('url', sharedUrl);
+  // u.searchParams.set('autostart', '1');
+  // return NextResponse.redirect(u, 303);
 }
 
 export async function GET(req: Request) {
