@@ -86,6 +86,7 @@ docker run --restart unless-stopped --name social-to-mealie \
 
 - OpenAI
 - GroqAI
+- LiteLLM (by providing the OPENAI_URL of own LiteLLM instance)
 
 ## Partial support:
 Because theese providers don't support the transcriptions API it requires LOCAL_TRANSCRIPTION_MODEL to be set, recommended model: `Xenova/whisper-base`, you can use any model that is compatible with the ONNX runtime from hugging face
