@@ -6,20 +6,31 @@ import { Spinner } from '@/components/ui/spinner';
 import { Textarea } from '@/components/ui/textarea';
 import type { progressType, recipeResult } from '@/lib/types';
 import { CircleCheck, CircleX } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
-export function RecipeFetcher({ tags }: { tags: string[] }) {
+export function RecipeFetcher({ tags, sharedUrl }: { tags: string[]; sharedUrl?: string }) {
   const [urlInput, setUrlInput] = useState('');
   const [progress, setProgress] = useState<progressType | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [recipes, setRecipe] = useState<recipeResult[] | null>(null);
   const [loading, setLoading] = useState(false);
 
+  // Wenn die Seite per Share-Target mit ?url=... geöffnet wurde:
+  // URL direkt ins Eingabefeld übernehmen (UX).
+  useEffect(() => {
+    if (!sharedUrl) return;
+    setUrlInput(sharedUrl);
+  }, [sharedUrl]);
+
   async function fetchRecipe() {
     setLoading(true);
     setProgress(null);
     setError(null);
-    const urlList: string[] = urlInput.split(',').map((u) => u.trim());
+
+    const urlList: string[] = urlInput
+      .split(',')
+      .map((u) => u.trim())
+      .filter(Boolean);
 
     try {
       for (const url of urlList) {
@@ -30,6 +41,7 @@ export function RecipeFetcher({ tags }: { tags: string[] }) {
           },
           body: JSON.stringify({ url, tags }),
         });
+
         const reader = response.body?.getReader();
         const decoder = new TextDecoder();
 
@@ -45,11 +57,13 @@ export function RecipeFetcher({ tags }: { tags: string[] }) {
 
             try {
               const data = JSON.parse(event.replace('data: ', ''));
+
               if (data.progress) {
                 setProgress(data.progress);
               }
+
               if (data.name) {
-                setRecipe((recipes) => [...(recipes || []), data]);
+                setRecipe((prev) => [...(prev || []), data]);
                 setLoading(false);
                 setTimeout(() => {
                   setProgress(null);
@@ -123,6 +137,7 @@ export function RecipeFetcher({ tags }: { tags: string[] }) {
           </CardContent>
         </Card>
       )}
+
       {recipes && (
         <div className='flex flex-wrap justify-center gap-4 max-w-7xl'>
           {recipes.map((recipe) => (
