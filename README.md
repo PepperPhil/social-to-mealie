@@ -1,5 +1,7 @@
 # Social Media to Mealie
 
+$${\color{red}Red}**Vibe Coding enhancements of Repo: [GerardPolloRebozado/social-to-mealie](https://github.com/GerardPolloRebozado/social-to-mealie)**
+
 Have you found a recipe on social media and don’t want to write it out yourself? This tool lets you import recipes from
 videos directly into [Mealie](https://github.com/mealie-recipes/mealie).
 
