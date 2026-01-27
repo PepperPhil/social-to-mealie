@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import AutoImport from '@/components/auto-import';
 
 type Progress = {
@@ -64,19 +64,9 @@ export default function ShareImportRunner({
     setMessage('Rezept wurde in Mealie angelegt.');
   }
 
-  // Autostart: wenn /share auf /?url=...&autostart=1 redirected
-  useEffect(() => {
-    if (!autostart) return;
-    if (!sharedUrl) return;
-    if (status !== 'idle') return; // verhindert Doppellauf
-
-    startImport(sharedUrl);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autostart, sharedUrl]);
-
   return (
     <>
-      {/* Manuelles AutoImport beibehalten (falls du es brauchst), aber es ist jetzt nicht mehr zwingend */}
+      {/* Autostart läuft jetzt ausschließlich über AutoImport (keine Doppel-UseEffects mehr) */}
       <AutoImport onImport={startImport} sharedUrl={sharedUrl} autostart={autostart} />
 
       {status !== 'idle' && (
