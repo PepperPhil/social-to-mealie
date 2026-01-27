@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import AutoImport from '@/components/auto-import';
 
 type Progress = {
@@ -9,7 +9,15 @@ type Progress = {
   recipeCreated: boolean | null;
 };
 
-export default function ShareImportRunner({ tags }: { tags: string[] }) {
+export default function ShareImportRunner({
+  tags,
+  sharedUrl,
+  autostart,
+}: {
+  tags: string[];
+  sharedUrl?: string;
+  autostart?: boolean;
+}) {
   const [status, setStatus] = useState<'idle' | 'running' | 'done' | 'error'>('idle');
   const [progress, setProgress] = useState<Progress>({
     videoDownloaded: null,
@@ -30,15 +38,12 @@ export default function ShareImportRunner({ tags }: { tags: string[] }) {
     setStatus('running');
     setMessage('Import gestartet …');
 
-    // Optional: initialer Status
     setProgress({
       videoDownloaded: null,
       audioTranscribed: null,
       recipeCreated: null,
     });
 
-    // Vereinfachte Variante (kein SSE): wir warten auf das Ergebnis.
-    // Wenn du unbedingt Progress live willst, kann ich dir danach SSE-Version bauen.
     const res = await fetch('/api/get-url', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -56,20 +61,29 @@ export default function ShareImportRunner({ tags }: { tags: string[] }) {
 
     setProgress(data?.progress ?? { videoDownloaded: true, audioTranscribed: true, recipeCreated: true });
     setStatus('done');
-
-    // Optional: wenn du später automatisch zu Mealie springen willst,
-    // können wir aus data.createdRecipe eine URL bauen – dafür brauchen wir deine externe Mealie Base URL im Client.
     setMessage('Rezept wurde in Mealie angelegt.');
   }
 
+  // Autostart: wenn /share auf /?url=...&autostart=1 redirected
+  useEffect(() => {
+    if (!autostart) return;
+    if (!sharedUrl) return;
+    if (status !== 'idle') return; // verhindert Doppellauf
+
+    startImport(sharedUrl);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autostart, sharedUrl]);
+
   return (
     <>
+      {/* Manuelles AutoImport beibehalten (falls du es brauchst), aber es ist jetzt nicht mehr zwingend */}
       <AutoImport onImport={startImport} />
 
       {status !== 'idle' && (
         <div className="mt-4 w-fit min-w-96 rounded-md border p-3 text-sm">
           <div className="font-semibold">Share-Import</div>
-          <div className="mt-1">{message}</div>
+          {sharedUrl ? <div className="mt-1 break-all opacity-80">{sharedUrl}</div> : null}
+          <div className="mt-2">{message}</div>
           <div className="mt-2 opacity-80">{pretty}</div>
         </div>
       )}
