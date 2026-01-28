@@ -159,8 +159,16 @@ export async function downloadMediaWithYtDlp(url: string): Promise<socialMediaRe
       mediaType: 'video',
     };
   } catch (error: any) {
+    const rawMessage = String(error?.message ?? error ?? 'unknown error');
+    if (rawMessage.includes('There is no video in this post')) {
+      console.warn('Instagram post without video detected.');
+      throw new Error(
+        'Instagram-Beitrag enthält kein Video. Bitte verwende einen Video-Post oder lade das Bild manuell hoch.'
+      );
+    }
+
     console.error('Error in downloadMediaWithYtDlp:', error);
     // Wichtig: text so, dass du ihn im UI sauber siehst
-    throw new Error(error?.message ?? 'Failed to download media or metadata');
+    throw new Error(rawMessage ?? 'Failed to download media or metadata');
   }
 }
