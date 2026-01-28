@@ -1,5 +1,5 @@
-import { getRecipe, postRecipe } from '@//lib/mealie';
-import type { progressType, socialMediaResult } from '@//lib/types';
+import { getRecipe, postRecipe } from '@/lib/mealie';
+import type { progressType, socialMediaResult } from '@/lib/types';
 import { generateRecipeFromAI, getTranscription } from '@/lib/ai';
 import { env } from '@/lib/constants';
 import { downloadMediaWithYtDlp } from '@/lib/yt-dlp';
@@ -64,16 +64,16 @@ async function handleRequest(
 
     log('audio', null, 'Audio/Transkription wird geprüft …');
 
-    const maybeBlob = (socialMedia as any)?.blob as Blob | null | undefined;
+    const { blob: audioBlob } = socialMedia;
 
-    if (!maybeBlob || (maybeBlob as any)?.size === 0) {
+    if (!audioBlob || audioBlob.size === 0) {
       // Kein Audio -> wir überspringen Transkription, aber lassen Prozess weiterlaufen
       progress.audioTranscribed = true;
       log('audio', true, 'Kein Audiostream gefunden. Transkription übersprungen (Description-only).');
       send({ progress, logs });
     } else {
       log('audio', null, 'Transkription gestartet …');
-      transcription = await getTranscription(maybeBlob);
+      transcription = await getTranscription(audioBlob);
       progress.audioTranscribed = true;
       log('audio', true, 'Transkription erfolgreich.');
       send({ progress, logs });
