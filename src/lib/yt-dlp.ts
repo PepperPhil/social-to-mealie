@@ -115,6 +115,8 @@ export async function downloadMediaWithYtDlp(url: string): Promise<socialMediaRe
   try {
     const metadata = (await ytdlp.getInfoAsync(url, {
       cookies: env.COOKIES,
+      ignoreNoFormatsError: true,
+      skipDownload: true,
     })) as VideoInfo;
 
     if (isImageMetadata(metadata)) {
