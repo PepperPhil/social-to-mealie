@@ -13,7 +13,7 @@ type StepKey = 'video' | 'audio' | 'recipe';
 
 type StepLog = {
   step: StepKey;
-  ok: boolean | null; // null = running/unknown
+  ok: boolean | null;
   message: string;
   ts: number;
 };
@@ -50,7 +50,6 @@ async function handleRequest(
   };
 
   try {
-    // initial state
     send({ progress, logs });
 
     // Step 1: Download / Extract
@@ -60,15 +59,29 @@ async function handleRequest(
     log('video', true, 'Media/Metadaten erfolgreich geladen.');
     send({ progress, logs });
 
-    // Step 2: Transcribe
-    log('audio', null, 'Transkription gestartet …');
-    const transcription = await getTranscription(socialMedia.blob);
-    progress.audioTranscribed = true;
-    log('audio', true, 'Transkription erfolgreich.');
-    send({ progress, logs });
+    // Step 2: Transcribe (optional)
+    let transcription = '';
+
+    log('audio', null, 'Audio/Transkription wird geprüft …');
+
+    const maybeBlob = (socialMedia as any)?.blob as Blob | null | undefined;
+
+    if (!maybeBlob || (maybeBlob as any)?.size === 0) {
+      // Kein Audio -> wir überspringen Transkription, aber lassen Prozess weiterlaufen
+      progress.audioTranscribed = true;
+      log('audio', true, 'Kein Audiostream gefunden. Transkription übersprungen (Description-only).');
+      send({ progress, logs });
+    } else {
+      log('audio', null, 'Transkription gestartet …');
+      transcription = await getTranscription(maybeBlob);
+      progress.audioTranscribed = true;
+      log('audio', true, 'Transkription erfolgreich.');
+      send({ progress, logs });
+    }
 
     // Step 3: Generate + Post to Mealie
     log('recipe', null, 'Rezept wird via KI erstellt & nach Mealie gepostet …');
+
     const recipe = await generateRecipeFromAI(
       transcription,
       socialMedia.description,
@@ -91,19 +104,15 @@ async function handleRequest(
       return;
     }
 
-    return new Response(JSON.stringify({ createdRecipe, progress, logs }), {
-      status: 200,
-    });
+    return new Response(JSON.stringify({ createdRecipe, progress, logs }), { status: 200 });
   } catch (error: any) {
     const msg = String(error?.message ?? error ?? 'Unbekannter Fehler');
 
-    // Best-effort: Step ableiten (wenn noch null ist, ist es genau dieser Step)
     let failedStep: StepKey = 'recipe';
     if (progress.videoDownloaded !== true) failedStep = 'video';
     else if (progress.audioTranscribed !== true) failedStep = 'audio';
     else failedStep = 'recipe';
 
-    // mark failed step
     if (failedStep === 'video') progress.videoDownloaded = false;
     if (failedStep === 'audio') progress.audioTranscribed = false;
     if (failedStep === 'recipe') progress.recipeCreated = false;
@@ -116,9 +125,7 @@ async function handleRequest(
       return;
     }
 
-    return new Response(JSON.stringify({ error: msg, progress, logs }), {
-      status: 500,
-    });
+    return new Response(JSON.stringify({ error: msg, progress, logs }), { status: 500 });
   }
 }
 
@@ -127,8 +134,6 @@ export async function POST(req: Request) {
   const url = body.url;
   const tags = body.tags ?? [];
 
-  // Der Client in RecipeFetcher sendet bewusst "text/event-stream" als Content-Type,
-  // um SSE zu triggern (so war es im Original).
   const contentType = req.headers.get('Content-Type');
 
   if (contentType === 'text/event-stream') {
