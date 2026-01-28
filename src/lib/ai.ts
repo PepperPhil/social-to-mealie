@@ -39,13 +39,10 @@ let localTranscriberModel: string | null = null;
 async function getLocalTranscriber(model: string): Promise<LocalTranscriber> {
   if (!localTranscriberPromise || localTranscriberModel !== model) {
     localTranscriberModel = model;
-    const transformers = (await import('@huggingface/transformers')) as {
-      pipeline: (
-        task: 'automatic-speech-recognition',
-        model: string,
-      ) => Promise<LocalTranscriber>;
-    };
-    localTranscriberPromise = transformers.pipeline('automatic-speech-recognition', model);
+    localTranscriberPromise = pipeline(
+      'automatic-speech-recognition',
+      model,
+    ) as Promise<LocalTranscriber>;
   }
 
   return localTranscriberPromise;
