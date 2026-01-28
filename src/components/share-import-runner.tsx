@@ -27,7 +27,15 @@ function pctFromSteps(steps: StepState[]) {
   return running ? Math.min(99, base + 5) : base;
 }
 
-export default function ShareImportRunner({ tags }: { tags: string[] }) {
+export default function ShareImportRunner({
+  tags,
+  sharedUrl,
+  autostart,
+}: {
+  tags: string[];
+  sharedUrl?: string;
+  autostart?: boolean;
+}) {
   const [status, setStatus] = useState<'idle' | 'running' | 'done' | 'error'>('idle');
   const [sharedUrlShown, setSharedUrlShown] = useState<string | null>(null);
 
@@ -168,6 +176,8 @@ export default function ShareImportRunner({ tags }: { tags: string[] }) {
     <>
       {/* AutoImport liest ?url=...&autostart=1 und ruft onImport(sharedUrl) */}
       <AutoImport
+        sharedUrl={sharedUrl}
+        autostart={autostart}
         onImport={async (u) => {
           setSharedUrlShown(u);
           await startImport(u);
