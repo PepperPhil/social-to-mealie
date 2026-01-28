@@ -57,8 +57,12 @@ async function convertBufferToWav(inputBuffer: Uint8Array, fileExt = ''): Promis
 
     return buffer;
   } catch (error: any) {
-    const stderr: string = error?.stderr ?? '';
-    if (stderr.includes('Output file #0 does not contain any stream') || stderr.includes('Stream map')) {
+    const stderrOutput: string = [error?.stderr, error?.message].filter(Boolean).join('\n');
+    if (
+      stderrOutput.includes('Output file #0 does not contain any stream') ||
+      stderrOutput.includes('Stream map') ||
+      stderrOutput.includes('does not contain any stream')
+    ) {
       throw new Error(
         'Dieses Video enthält keine Audiospur (oder yt-dlp hat ein Video ohne Audio geliefert).'
       );
@@ -75,11 +79,11 @@ async function convertBufferToWav(inputBuffer: Uint8Array, fileExt = ''): Promis
 }
 
 async function getAudioFileBytes(url: string): Promise<Uint8Array> {
-  // 1) Versuch: bestaudio bevorzugt (m4a), sonst bestaudio
+  // 1) Versuch: nur Audio-Formate (m4a bevorzugt), keine stummen Streams
   try {
     const audioFile = await ytdlp.getFileAsync(url, {
       // je nach lib: format kann als string gut funktionieren
-      format: 'bestaudio[ext=m4a]/bestaudio/best',
+      format: 'bestaudio[acodec!=none][ext=m4a]/bestaudio[acodec!=none]/best[acodec!=none]',
       cookies: env.COOKIES,
     } as any);
 
@@ -88,9 +92,9 @@ async function getAudioFileBytes(url: string): Promise<Uint8Array> {
     // ignore -> fallback
   }
 
-  // 2) Fallback: best (kann Video sein), dann extrahiert ffmpeg Audio falls vorhanden
+  // 2) Fallback: best mit Audio (kann Video sein), dann extrahiert ffmpeg Audio falls vorhanden
   const file = await ytdlp.getFileAsync(url, {
-    format: 'best',
+    format: 'best[acodec!=none]/best',
     cookies: env.COOKIES,
   } as any);
 
