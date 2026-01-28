@@ -2,7 +2,6 @@ import { env } from './constants';
 import { createOpenAI } from '@ai-sdk/openai';
 import { experimental_transcribe, generateObject } from 'ai';
 import { z } from 'zod';
-import { pipeline } from '@huggingface/transformers';
 import { WaveFile } from 'wavefile';
 
 const client = createOpenAI({
@@ -30,13 +29,23 @@ const recipeSchema = z.object({
   keywords: z.array(z.string()).optional(),
 });
 
-let localTranscriberPromise: Promise<any> | null = null;
+type LocalTranscriber = (
+  audio: Float32Array | Float32Array[] | number[] | number[][],
+) => Promise<{ text?: string } | string>;
+
+let localTranscriberPromise: Promise<LocalTranscriber> | null = null;
 let localTranscriberModel: string | null = null;
 
-async function getLocalTranscriber(model: string): Promise<any> {
+async function getLocalTranscriber(model: string): Promise<LocalTranscriber> {
   if (!localTranscriberPromise || localTranscriberModel !== model) {
     localTranscriberModel = model;
-    localTranscriberPromise = pipeline('automatic-speech-recognition', model);
+    const transformers = (await import('@huggingface/transformers')) as {
+      pipeline: (
+        task: 'automatic-speech-recognition',
+        model: string,
+      ) => Promise<LocalTranscriber>;
+    };
+    localTranscriberPromise = transformers.pipeline('automatic-speech-recognition', model);
   }
 
   return localTranscriberPromise;
