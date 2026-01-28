@@ -3,183 +3,248 @@
 import { useMemo, useState } from 'react';
 import AutoImport from '@/components/auto-import';
 
-type StepKey = 'video' | 'audio' | 'recipe';
+type StepKey = 'download' | 'convert' | 'transcribe' | 'recipe';
 
-type Progress = {
+type StepState = {
+  title: string;
+  status: 'idle' | 'running' | 'ok' | 'fail';
+  detail?: string;
+};
+
+type ApiProgress = {
   videoDownloaded: boolean | null;
   audioTranscribed: boolean | null;
   recipeCreated: boolean | null;
 };
 
-type StepLog = {
-  step: StepKey;
-  ok: boolean | null;
-  message: string;
-  ts: number;
-};
-
-function stepStateFromProgress(step: StepKey, p: Progress): 'idle' | 'running' | 'ok' | 'fail' {
-  const v =
-    step === 'video' ? p.videoDownloaded :
-    step === 'audio' ? p.audioTranscribed :
-    p.recipeCreated;
-
-  if (v === true) return 'ok';
-  if (v === false) return 'fail';
-  return 'running';
-}
-
-function progressValueForStep(step: StepKey, p: Progress): number {
-  const st = stepStateFromProgress(step, p);
-  if (st === 'ok') return 100;
-  if (st === 'fail') return 100;
-  return 30; // running = "irgendwas passiert"
-}
-
-function label(step: StepKey) {
-  if (step === 'video') return '1) Download / Extract';
-  if (step === 'audio') return '2) Audio → Transkript';
-  return '3) Rezept → Mealie';
+// Kleine Helper für UI
+function pctFromSteps(steps: StepState[]) {
+  const total = steps.length;
+  const done = steps.filter((s) => s.status === 'ok').length;
+  const running = steps.some((s) => s.status === 'running');
+  // Wenn ein Step "running" ist, geben wir etwas “Zwischenstand”
+  const base = (done / total) * 100;
+  return running ? Math.min(99, base + 5) : base;
 }
 
 export default function ShareImportRunner({ tags }: { tags: string[] }) {
   const [status, setStatus] = useState<'idle' | 'running' | 'done' | 'error'>('idle');
-  const [progress, setProgress] = useState<Progress>({
-    videoDownloaded: null,
-    audioTranscribed: null,
-    recipeCreated: null,
-  });
-  const [message, setMessage] = useState<string>('');
-  const [logs, setLogs] = useState<StepLog[]>([]);
   const [sharedUrlShown, setSharedUrlShown] = useState<string | null>(null);
 
-  const lastLogByStep = useMemo(() => {
-    const m = new Map<StepKey, StepLog>();
-    for (const l of logs) m.set(l.step, l);
-    return m;
-  }, [logs]);
+  const [steps, setSteps] = useState<Record<StepKey, StepState>>({
+    download: { title: 'Download (yt-dlp)', status: 'idle' },
+    convert: { title: 'Audio → WAV (ffmpeg)', status: 'idle' },
+    transcribe: { title: 'Transkription (Whisper)', status: 'idle' },
+    recipe: { title: 'Rezept erzeugen + nach Mealie', status: 'idle' },
+  });
 
-  async function startImport(url: string) {
+  const [logs, setLogs] = useState<string[]>([]);
+  const [errorText, setErrorText] = useState<string>('');
+
+  const stepsList = useMemo(() => Object.values(steps), [steps]);
+  const percent = useMemo(() => pctFromSteps(stepsList), [stepsList]);
+
+  function log(line: string) {
+    setLogs((l) => [`${new Date().toISOString()}  ${line}`, ...l].slice(0, 200));
+  }
+
+  function setStep(step: StepKey, patch: Partial<StepState>) {
+    setSteps((prev) => ({
+      ...prev,
+      [step]: { ...prev[step], ...patch },
+    }));
+  }
+
+  function resetAll(url: string) {
     setSharedUrlShown(url);
     setStatus('running');
-    setMessage('Import gestartet …');
+    setErrorText('');
     setLogs([]);
-    setProgress({
-      videoDownloaded: null,
-      audioTranscribed: null,
-      recipeCreated: null,
+    setSteps({
+      download: { title: 'Download (yt-dlp)', status: 'running' },
+      convert: { title: 'Audio → WAV (ffmpeg)', status: 'idle' },
+      transcribe: { title: 'Transkription (Whisper)', status: 'idle' },
+      recipe: { title: 'Rezept erzeugen + nach Mealie', status: 'idle' },
     });
+  }
 
-    const response = await fetch('/api/get-url', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'text/event-stream',
-      },
-      body: JSON.stringify({ url, tags }),
-    });
+  function mapApiProgressToSteps(p?: ApiProgress) {
+    if (!p) return;
 
-    const reader = response.body?.getReader();
-    if (!reader) {
-      setStatus('error');
-      setMessage('Kein SSE Stream verfügbar.');
-      return;
+    // videoDownloaded: true => download ok + convert ok (wenn du convert separat reporten willst, siehe API-Fix unten)
+    if (p.videoDownloaded === true) {
+      setStep('download', { status: 'ok' });
+      // convert lassen wir zunächst "running", weil bei dir das ffmpeg-Problem genau da sitzt
+      // Wenn du in der API künftig convert separat reportest, kannst du das sauberer trennen.
+      if (steps.convert.status === 'idle') setStep('convert', { status: 'running' });
+    } else if (p.videoDownloaded === false) {
+      setStep('download', { status: 'fail' });
     }
 
-    const decoder = new TextDecoder();
+    if (p.audioTranscribed === true) {
+      setStep('convert', { status: 'ok' });
+      setStep('transcribe', { status: 'ok' });
+      if (steps.recipe.status === 'idle') setStep('recipe', { status: 'running' });
+    } else if (p.audioTranscribed === false) {
+      // bei dir heißt das Feld “audioTranscribed” – das kann auch “convert oder transcribe” bedeuten
+      // wir markieren transcribe fail, und geben convert “detail”
+      setStep('transcribe', { status: 'fail' });
+    }
 
-    try {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        const chunk = decoder.decode(value);
-        chunk.split('\n\n').forEach((event) => {
-          if (!event.startsWith('data: ')) return;
-
-          const raw = event.replace('data: ', '');
-          let data: any;
-          try {
-            data = JSON.parse(raw);
-          } catch {
-            // ignore malformed chunk
-            return;
-          }
-
-          if (data.logs) setLogs(data.logs as StepLog[]);
-          if (data.progress) setProgress(data.progress as Progress);
-
-          if (data.error) {
-            setStatus('error');
-            setMessage(String(data.error));
-          }
-
-          // Wenn serverseitig am Ende ein createdRecipe kommt, hat es "name"
-          if (data.name) {
-            setStatus('done');
-            setMessage('Rezept wurde in Mealie angelegt.');
-          }
-        });
-      }
-
-      // Falls der Stream endet ohne "name" und ohne "error"
-      if (status === 'running') {
-        // Heuristik: wenn recipeCreated true dann done, sonst error
-        const ok = progress.recipeCreated === true;
-        setStatus(ok ? 'done' : 'error');
-        setMessage(ok ? 'Rezept wurde in Mealie angelegt.' : 'Import endete ohne Ergebnis.');
-      }
-    } catch (e: any) {
-      setStatus('error');
-      setMessage(e?.message ?? 'Unbekannter Fehler im Import-Stream');
+    if (p.recipeCreated === true) {
+      setStep('recipe', { status: 'ok' });
+    } else if (p.recipeCreated === false) {
+      setStep('recipe', { status: 'fail' });
     }
   }
 
-  const steps: StepKey[] = ['video', 'audio', 'recipe'];
+  async function startImport(url: string) {
+    resetAll(url);
+    log(`Import gestartet für: ${url}`);
+
+    try {
+      const res = await fetch('/api/get-url', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ url, tags }),
+      });
+
+      const data = await res.json().catch(() => ({} as any));
+
+      if (!res.ok) {
+        const p = data?.progress as ApiProgress | undefined;
+        mapApiProgressToSteps(p);
+
+        setStatus('error');
+        const msg = data?.error ?? `Import fehlgeschlagen (HTTP ${res.status})`;
+        setErrorText(msg);
+        log(`FEHLER: ${msg}`);
+
+        // Wenn Backend “debug”/”details” liefert, zeigen
+        if (data?.details) log(`DETAILS: ${String(data.details)}`);
+        if (data?.stderr) log(`STDERR: ${String(data.stderr)}`);
+
+        // markiere laufende Steps als fail, damit UI nicht “hängt”
+        setSteps((prev) => {
+          const next = { ...prev };
+          (Object.keys(next) as StepKey[]).forEach((k) => {
+            if (next[k].status === 'running') next[k] = { ...next[k], status: 'fail' };
+          });
+          return next;
+        });
+
+        return;
+      }
+
+      // Success
+      mapApiProgressToSteps(data?.progress as ApiProgress | undefined);
+
+      setStatus('done');
+      log('Rezept wurde in Mealie angelegt.');
+      setStep('download', { status: 'ok' });
+      setStep('convert', { status: 'ok' });
+      setStep('transcribe', { status: 'ok' });
+      setStep('recipe', { status: 'ok' });
+    } catch (e: any) {
+      setStatus('error');
+      const msg = e?.message ? String(e.message) : 'Unbekannter Fehler';
+      setErrorText(msg);
+      log(`FEHLER (Exception): ${msg}`);
+
+      setSteps((prev) => {
+        const next = { ...prev };
+        (Object.keys(next) as StepKey[]).forEach((k) => {
+          if (next[k].status === 'running') next[k] = { ...next[k], status: 'fail' };
+        });
+        return next;
+      });
+    }
+  }
+
+  const barLabel =
+    status === 'idle' ? 'Bereit' : status === 'running' ? 'Import läuft…' : status === 'done' ? 'Fertig' : 'Fehler';
 
   return (
     <>
-      <AutoImport onImport={startImport} />
+      {/* AutoImport liest ?url=...&autostart=1 und ruft onImport(sharedUrl) */}
+      <AutoImport
+        onImport={async (u) => {
+          setSharedUrlShown(u);
+          await startImport(u);
+        }}
+      />
 
-      {status !== 'idle' && (
-        <div className="mt-4 w-fit min-w-96 rounded-md border p-3 text-sm">
+      {/* Panel nur zeigen wenn einmal gestartet oder url da ist */}
+      {(sharedUrlShown || status !== 'idle') && (
+        <div className="mt-4 w-fit min-w-96 rounded-md border p-4 text-sm">
           <div className="font-semibold">Share-Import</div>
 
           {sharedUrlShown ? (
-            <div className="mt-1 break-all opacity-80">{sharedUrlShown}</div>
+            <div className="mt-2">
+              <div className="text-xs opacity-70">URL</div>
+              <div className="break-all">{sharedUrlShown}</div>
+            </div>
           ) : null}
 
-          <div className="mt-2">{message}</div>
+          <div className="mt-3">
+            <div className="flex items-center justify-between text-xs opacity-80">
+              <span>{barLabel}</span>
+              <span>{Math.round(percent)}%</span>
+            </div>
+            <div className="mt-1 h-2 w-full rounded bg-neutral-800">
+              <div
+                className="h-2 rounded bg-neutral-200 transition-all"
+                style={{ width: `${Math.max(3, percent)}%` }}
+              />
+            </div>
+          </div>
 
-          <div className="mt-3 flex flex-col gap-3">
-            {steps.map((s) => {
-              const st = stepStateFromProgress(s, progress);
-              const v = progressValueForStep(s, progress);
-              const l = lastLogByStep.get(s);
+          <div className="mt-4 space-y-2">
+            {(Object.keys(steps) as StepKey[]).map((k) => {
+              const s = steps[k];
+              const dot =
+                s.status === 'ok'
+                  ? '●'
+                  : s.status === 'fail'
+                    ? '●'
+                    : s.status === 'running'
+                      ? '◐'
+                      : '○';
 
               return (
-                <div key={s} className="rounded-md border p-2">
-                  <div className="flex items-center justify-between">
-                    <div className="font-medium">{label(s)}</div>
-                    <div className="text-xs opacity-80">
-                      {st === 'ok' ? 'OK' : st === 'fail' ? 'FAIL' : '…'}
-                    </div>
+                <div key={k} className="flex items-start gap-2">
+                  <div className="mt-[2px] w-4 text-center">{dot}</div>
+                  <div className="flex-1">
+                    <div className="font-medium">{s.title}</div>
+                    {s.detail ? <div className="text-xs opacity-75">{s.detail}</div> : null}
                   </div>
-
-                  <div className="mt-2">
-                    <progress className="w-full" value={v} max={100} />
+                  <div className="text-xs opacity-70">
+                    {s.status === 'idle' ? '—' : s.status === 'running' ? 'läuft' : s.status === 'ok' ? 'OK' : 'FAIL'}
                   </div>
-
-                  {l?.message ? (
-                    <div className={`mt-2 text-xs ${l.ok === false ? 'opacity-100' : 'opacity-80'}`}>
-                      {l.message}
-                    </div>
-                  ) : (
-                    <div className="mt-2 text-xs opacity-60">—</div>
-                  )}
                 </div>
               );
             })}
           </div>
+
+          {status === 'error' && errorText ? (
+            <div className="mt-4 rounded-md border border-red-700/40 bg-red-900/20 p-3">
+              <div className="font-semibold">Fehler</div>
+              <div className="mt-1 break-words opacity-90">{errorText}</div>
+            </div>
+          ) : null}
+
+          {logs.length > 0 ? (
+            <div className="mt-4">
+              <div className="text-xs font-semibold opacity-80">Log (neueste zuerst)</div>
+              <div className="mt-2 max-h-48 overflow-auto rounded bg-neutral-950/60 p-2 text-[11px] leading-relaxed">
+                {logs.map((l, i) => (
+                  <div key={i} className="break-words opacity-90">
+                    {l}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
         </div>
       )}
     </>
