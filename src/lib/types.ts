@@ -38,6 +38,8 @@ export type socialMediaResult = {
     thumbnail: string;
     description: string;
     title: string;
+    mediaType: 'video' | 'image';
+    imageUrl?: string;
 };
 
 export type tag = {

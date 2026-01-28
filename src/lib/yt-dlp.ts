@@ -101,11 +101,32 @@ async function getAudioFileBytes(url: string): Promise<Uint8Array> {
   return await file.bytes();
 }
 
+const imageExtensions = new Set(['jpg', 'jpeg', 'png', 'webp', 'gif']);
+
+function isImageMetadata(metadata: VideoInfo): boolean {
+  const ext = metadata.ext?.toLowerCase();
+  if (!ext || !imageExtensions.has(ext)) return false;
+
+  const vcodec = (metadata as any)?.vcodec;
+  return !vcodec || vcodec === 'none';
+}
+
 export async function downloadMediaWithYtDlp(url: string): Promise<socialMediaResult> {
   try {
     const metadata = (await ytdlp.getInfoAsync(url, {
       cookies: env.COOKIES,
     })) as VideoInfo;
+
+    if (isImageMetadata(metadata)) {
+      return {
+        blob: new Blob([], { type: 'audio/wav' }),
+        thumbnail: metadata.thumbnail,
+        description: metadata.description || 'No description found',
+        title: metadata.title,
+        mediaType: 'image',
+        imageUrl: (metadata as any)?.url ?? metadata.thumbnail,
+      };
+    }
 
     const audioAvailable = hasAudioStream(metadata);
     let audioBlob = new Blob([], { type: 'audio/wav' });
@@ -122,6 +143,7 @@ export async function downloadMediaWithYtDlp(url: string): Promise<socialMediaRe
       thumbnail: metadata.thumbnail,
       description: metadata.description || 'No description found',
       title: metadata.title,
+      mediaType: 'video',
     };
   } catch (error: any) {
     console.error('Error in downloadMediaWithYtDlp:', error);

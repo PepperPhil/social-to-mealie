@@ -1,4 +1,10 @@
-import { findRecipeBySourceUrl, findRecipeIdentifierBySourceUrl, getRecipe, postRecipe } from '@/lib/mealie';
+import {
+  findRecipeBySourceUrl,
+  findRecipeIdentifierBySourceUrl,
+  getRecipe,
+  postRecipe,
+  postRecipeImage,
+} from '@/lib/mealie';
 import type { progressType, socialMediaResult } from '@/lib/types';
 import { generateRecipeFromAI, getTranscription } from '@/lib/ai';
 import { env } from '@/lib/constants';
@@ -53,6 +59,16 @@ function addSourceTag(url: string, tags: string[]) {
   return [...tags, sourceTag];
 }
 
+function filenameFromUrl(url: string) {
+  try {
+    const pathname = new URL(url).pathname;
+    const name = pathname.split('/').pop();
+    return name && name.trim().length > 0 ? name : 'upload.jpg';
+  } catch {
+    return 'upload.jpg';
+  }
+}
+
 async function handleRequest(
   url: string,
   tags: string[],
@@ -100,6 +116,43 @@ async function handleRequest(
     // Step 1: Download / Extract
     log('video', null, 'Download/Extract gestartet …');
     socialMedia = await downloadMediaWithYtDlp(url);
+
+    if (socialMedia.mediaType === 'image' && socialMedia.imageUrl) {
+      const imageResponse = await fetch(socialMedia.imageUrl);
+      if (!imageResponse.ok) {
+        throw new Error('Bild konnte nicht geladen werden.');
+      }
+
+      const image = await imageResponse.blob();
+      const filename = filenameFromUrl(socialMedia.imageUrl);
+
+      progress.videoDownloaded = true;
+      log('video', true, 'Bild erfolgreich geladen.');
+      send({ progress, logs });
+
+      log('audio', null, 'Text wird aus dem Bild extrahiert …');
+      log('recipe', null, 'Rezept wird aus dem Bild extrahiert & nach Mealie gepostet …');
+
+      const mealieResponse = await postRecipeImage(image, filename, tags);
+      const createdRecipe = await getRecipe(mealieResponse);
+
+      progress.audioTranscribed = true;
+      log('audio', true, 'Text aus dem Bild extrahiert.');
+      send({ progress, logs });
+
+      progress.recipeCreated = true;
+      log('recipe', true, 'Rezept wurde in Mealie angelegt.');
+      send({ progress, logs });
+      send(createdRecipe);
+
+      if (isSse && controller) {
+        controller.close();
+        return;
+      }
+
+      return new Response(JSON.stringify({ createdRecipe, progress, logs }), { status: 200 });
+    }
+
     progress.videoDownloaded = true;
     log('video', true, 'Media/Metadaten erfolgreich geladen.');
     send({ progress, logs });
