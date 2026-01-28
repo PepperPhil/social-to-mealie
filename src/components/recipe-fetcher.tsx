@@ -18,10 +18,6 @@ type StepLog = {
   ts: number;
 };
 
-function isLikelyImageUrl(input: string) {
-  return /\.(png|jpe?g|webp|gif|bmp|tiff?|heic|avif)(\?.*)?$/i.test(input);
-}
-
 function extractFirstUrl(input: string): string | null {
   const m = input.match(/https?:\/\/\S+/i);
   return m ? m[0].replace(/[)\],.]*$/, '') : null;
@@ -32,21 +28,16 @@ export function RecipeFetcher({ tags }: { tags: string[] }) {
   const placeholderImage = '/recipe-placeholder.svg';
 
   const [urlInput, setUrlInput] = useState('');
-  const [imageUrlInput, setImageUrlInput] = useState('');
-  const [imageFile, setImageFile] = useState<File | null>(null);
   const [progress, setProgress] = useState<progressType | null>(null);
   const [logs, setLogs] = useState<StepLog[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [recipes, setRecipe] = useState<recipeResult[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const [importMode, setImportMode] = useState<'url' | 'image'>('url');
-
-  const isImageImport = importMode === 'image';
 
   // ✅ Share-URL automatisch ins Textfeld übernehmen (nur wenn Feld leer ist)
   useEffect(() => {
-    if (urlInput.trim().length > 0 || imageUrlInput.trim().length > 0) return;
+    if (urlInput.trim().length > 0) return;
 
     const url = sp.get('url') ?? '';
     const text = sp.get('text') ?? '';
@@ -55,13 +46,9 @@ export function RecipeFetcher({ tags }: { tags: string[] }) {
     const sharedUrl = extractFirstUrl(candidate);
 
     if (sharedUrl) {
-      if (isLikelyImageUrl(sharedUrl)) {
-        setImageUrlInput(sharedUrl);
-      } else {
-        setUrlInput(sharedUrl);
-      }
+      setUrlInput(sharedUrl);
     }
-  }, [sp, urlInput, imageUrlInput]);
+  }, [sp, urlInput]);
 
   async function confirmReimportIfExists(url: string) {
     try {
@@ -87,7 +74,6 @@ export function RecipeFetcher({ tags }: { tags: string[] }) {
     setLogs([]);
     setError(null);
     setIsCollapsed(false);
-    setImportMode('url');
 
     const urlList: string[] = urlInput
       .split(',')
@@ -158,79 +144,6 @@ export function RecipeFetcher({ tags }: { tags: string[] }) {
     }
   }
 
-  async function fetchImageRecipe() {
-    if (!imageFile && imageUrlInput.trim().length === 0) return;
-
-    setLoading(true);
-    setProgress({
-      videoDownloaded: null,
-      audioTranscribed: null,
-      recipeCreated: null,
-    });
-    setLogs([]);
-    setError(null);
-    setIsCollapsed(false);
-    setImportMode('image');
-
-    try {
-      let response: Response;
-
-      if (imageFile) {
-        const data = new FormData();
-        data.append('image', imageFile);
-        data.append('tags', JSON.stringify(tags));
-        data.append('force', 'false');
-
-        response = await fetch('/api/get-image', {
-          method: 'POST',
-          body: data,
-        });
-      } else {
-        const { shouldImport, force } = await confirmReimportIfExists(imageUrlInput.trim());
-        if (!shouldImport) {
-          setLoading(false);
-          return;
-        }
-
-        response = await fetch('/api/get-image', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ imageUrl: imageUrlInput.trim(), tags, force }),
-        });
-      }
-
-      const data = await response.json().catch(() => ({} as any));
-
-      if (data.progress) {
-        setProgress(data.progress);
-      }
-
-      if (data.logs) {
-        setLogs(data.logs);
-      }
-
-      if (!response.ok) {
-        setError(data?.error ?? `Import fehlgeschlagen (HTTP ${response.status})`);
-        setLoading(false);
-        setIsCollapsed(false);
-        return;
-      }
-
-      if (data.name) {
-        setRecipe((recipes) => [...(recipes || []), data]);
-      }
-
-      setLoading(false);
-      setIsCollapsed(true);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unknown error');
-      setLoading(false);
-      setIsCollapsed(false);
-    }
-  }
-
   const latestLogByStep = useMemo(() => {
     const map: Record<StepKey, StepLog | undefined> = {
       video: undefined,
@@ -256,38 +169,6 @@ export function RecipeFetcher({ tags }: { tags: string[] }) {
         {loading ? 'Loading...' : 'Submit'}
       </Button>
 
-      <div className="mt-4 w-96 space-y-2">
-        <div className="text-sm font-medium">Image import</div>
-        <input
-          type="url"
-          className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm"
-          placeholder="Paste image URL"
-          value={imageUrlInput}
-          onChange={(e) => {
-            setImageUrlInput(e.target.value);
-            if (e.target.value.trim().length > 0) setImageFile(null);
-          }}
-        />
-        <input
-          type="file"
-          accept="image/*"
-          className="w-full text-sm"
-          onChange={(event) => {
-            const file = event.target.files?.[0] ?? null;
-            setImageFile(file);
-            if (file) setImageUrlInput('');
-          }}
-        />
-        <Button
-          className="w-full"
-          variant="secondary"
-          onClick={fetchImageRecipe}
-          disabled={loading || (!imageFile && imageUrlInput.trim().length === 0)}
-        >
-          {loading ? 'Loading...' : 'Import image'}
-        </Button>
-      </div>
-
       {progress && (
         <Card className={'mt-4 w-96'}>
           <CardHeader className="flex flex-row items-center justify-between gap-2">
@@ -305,7 +186,7 @@ export function RecipeFetcher({ tags }: { tags: string[] }) {
             <CardContent className={'flex w-full flex-col gap-4'}>
               <div className={'flex flex-col gap-1 text-sm'}>
                 <div className={'flex items-center justify-between gap-4'}>
-                  <span>{isImageImport ? 'Image uploaded' : 'Video downloaded'}</span>
+                  <span>Video downloaded</span>
                   {progress.videoDownloaded === true ? (
                     <CircleCheck className="text-green-500" />
                   ) : progress.videoDownloaded === null ? (
@@ -320,7 +201,7 @@ export function RecipeFetcher({ tags }: { tags: string[] }) {
               </div>
               <div className={'flex flex-col gap-1 text-sm'}>
                 <div className={'flex items-center justify-between gap-4'}>
-                  <span>{isImageImport ? 'Text extracted' : 'Audio transcribed'}</span>
+                  <span>Audio transcribed</span>
                   {progress.audioTranscribed === true ? (
                     <CircleCheck className="text-green-500" />
                   ) : progress.audioTranscribed === null ? (
