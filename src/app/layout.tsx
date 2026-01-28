@@ -14,6 +14,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/* PWA */}
         <link rel="manifest" href="/manifest.webmanifest" />
         <meta name="theme-color" content="#111111" />
+        <link rel="icon" href="/file.svg" type="image/svg+xml" />
         <link rel="apple-touch-icon" href="/icons/icon-192.png" />
       </head>
       <body>
