@@ -224,6 +224,10 @@ async function handleRequest(
     if (failedStep === 'audio') progress.audioTranscribed = false;
     if (failedStep === 'recipe') progress.recipeCreated = false;
 
+    if (progress.videoDownloaded === null) progress.videoDownloaded = false;
+    if (progress.audioTranscribed === null) progress.audioTranscribed = false;
+    if (progress.recipeCreated === null) progress.recipeCreated = false;
+
     log(failedStep, false, msg);
     send({ progress, logs, error: msg });
 
