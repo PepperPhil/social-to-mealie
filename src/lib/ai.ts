@@ -2,7 +2,6 @@ import { env } from './constants';
 import { createOpenAI } from '@ai-sdk/openai';
 import { experimental_transcribe, generateObject } from 'ai';
 import { z } from 'zod';
-import { pipeline } from '@huggingface/transformers';
 import { WaveFile } from 'wavefile';
 
 const client = createOpenAI({
@@ -40,10 +39,11 @@ let localTranscriberModel: string | null = null;
 async function getLocalTranscriber(model: string): Promise<LocalTranscriber> {
   if (!localTranscriberPromise || localTranscriberModel !== model) {
     localTranscriberModel = model;
+    const { pipeline } = await import('@huggingface/transformers');
     localTranscriberPromise = pipeline(
       'automatic-speech-recognition',
       model,
-    ) as Promise<LocalTranscriber>;
+    ) as unknown as Promise<LocalTranscriber>;
   }
 
   return localTranscriberPromise;
