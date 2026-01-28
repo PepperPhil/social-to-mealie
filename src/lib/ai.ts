@@ -43,7 +43,7 @@ async function getLocalTranscriber(model: string): Promise<LocalTranscriber> {
     localTranscriberPromise = pipeline(
       'automatic-speech-recognition',
       model,
-    ) as Promise<LocalTranscriber>;
+    ) as unknown as Promise<LocalTranscriber>;
   }
 
   return localTranscriberPromise;
