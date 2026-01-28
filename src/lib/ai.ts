@@ -34,19 +34,16 @@ type LocalTranscriber = (
   audio: Float32Array | Float32Array[] | number[] | number[][],
 ) => Promise<{ text?: string } | string>;
 
-type LocalTranscriberFactory = (
-  task: 'automatic-speech-recognition',
-  model: string,
-) => Promise<LocalTranscriber>;
-
 let localTranscriberPromise: Promise<LocalTranscriber> | null = null;
 let localTranscriberModel: string | null = null;
 
 async function getLocalTranscriber(model: string): Promise<LocalTranscriber> {
   if (!localTranscriberPromise || localTranscriberModel !== model) {
     localTranscriberModel = model;
-    const createTranscriber = pipeline as unknown as LocalTranscriberFactory;
-    localTranscriberPromise = createTranscriber('automatic-speech-recognition', model);
+    localTranscriberPromise = pipeline(
+      'automatic-speech-recognition',
+      model,
+    ) as Promise<LocalTranscriber>;
   }
 
   return localTranscriberPromise;
