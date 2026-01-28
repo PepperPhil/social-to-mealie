@@ -1,26 +1,40 @@
 'use client';
 
+import { useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Spinner } from '@/components/ui/spinner';
 import { Textarea } from '@/components/ui/textarea';
 import type { progressType, recipeResult } from '@/lib/types';
 import { CircleCheck, CircleX } from 'lucide-react';
-import { useEffect, useState } from 'react';
 
-export function RecipeFetcher({ tags, sharedUrl }: { tags: string[]; sharedUrl?: string }) {
+function extractFirstUrl(input: string): string | null {
+  const m = input.match(/https?:\/\/\S+/i);
+  return m ? m[0].replace(/[)\],.]*$/, '') : null;
+}
+
+export function RecipeFetcher({ tags }: { tags: string[] }) {
+  const sp = useSearchParams();
+
   const [urlInput, setUrlInput] = useState('');
   const [progress, setProgress] = useState<progressType | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [recipes, setRecipe] = useState<recipeResult[] | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // Wenn die Seite per Share-Target mit ?url=... geöffnet wurde:
-  // URL direkt ins Eingabefeld übernehmen (UX).
+  // ✅ Share-URL automatisch ins Textfeld übernehmen (nur wenn Feld leer ist)
   useEffect(() => {
-    if (!sharedUrl) return;
-    setUrlInput(sharedUrl);
-  }, [sharedUrl]);
+    if (urlInput.trim().length > 0) return;
+
+    const url = sp.get('url') ?? '';
+    const text = sp.get('text') ?? '';
+    const title = sp.get('title') ?? '';
+    const candidate = [url, text, title].filter(Boolean).join('\n');
+    const sharedUrl = extractFirstUrl(candidate);
+
+    if (sharedUrl) setUrlInput(sharedUrl);
+  }, [sp, urlInput]);
 
   async function fetchRecipe() {
     setLoading(true);
@@ -63,16 +77,14 @@ export function RecipeFetcher({ tags, sharedUrl }: { tags: string[]; sharedUrl?:
               }
 
               if (data.name) {
-                setRecipe((prev) => [...(prev || []), data]);
+                setRecipe((recipes) => [...(recipes || []), data]);
                 setLoading(false);
-                setTimeout(() => {
-                  setProgress(null);
-                }, 10000);
+                setTimeout(() => setProgress(null), 10000);
               } else if (data.error) {
                 setError(data.error);
                 setLoading(false);
               }
-            } catch (e) {
+            } catch {
               setError('Error parsing event stream');
               setLoading(false);
             }
@@ -94,6 +106,7 @@ export function RecipeFetcher({ tags, sharedUrl }: { tags: string[]; sharedUrl?:
         value={urlInput}
         onChange={(e) => setUrlInput(e.target.value)}
       />
+
       <Button className='w-96' onClick={fetchRecipe} disabled={loading}>
         {loading ? 'Loading...' : 'Submit'}
       </Button>
