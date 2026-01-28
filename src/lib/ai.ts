@@ -39,6 +39,7 @@ let localTranscriberModel: string | null = null;
 async function getLocalTranscriber(model: string): Promise<LocalTranscriber> {
   if (!localTranscriberPromise || localTranscriberModel !== model) {
     localTranscriberModel = model;
+    const { pipeline } = await import('@huggingface/transformers');
     localTranscriberPromise = pipeline(
       'automatic-speech-recognition',
       model,
