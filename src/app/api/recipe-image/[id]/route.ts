@@ -1,7 +1,12 @@
 import { env } from '@/lib/constants';
+import type { NextRequest } from 'next/server';
 
-export async function GET(_req: Request, { params }: { params: { id: string } }) {
-  const imageUrl = `${env.MEALIE_URL}/api/media/recipes/${params.id}/images/original.webp`;
+export async function GET(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const { id } = await params;
+  const imageUrl = `${env.MEALIE_URL}/api/media/recipes/${id}/images/original.webp`;
 
   const response = await fetch(imageUrl, {
     headers: {
