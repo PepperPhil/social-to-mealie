@@ -30,9 +30,9 @@ const recipeSchema = z.object({
   keywords: z.array(z.string()).optional(),
 });
 
-let localTranscriberPromise: Promise<any> | null = null;
+let localTranscriberPromise: Promise<Awaited<ReturnType<typeof pipeline>>> | null = null;
 
-async function getLocalTranscriber(model: string): Promise<any> {
+async function getLocalTranscriber(model: string) {
   if (!localTranscriberPromise) {
     localTranscriberPromise = pipeline('automatic-speech-recognition', model);
   }
