@@ -27,21 +27,16 @@ RUN node --run build
 FROM base AS runner
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y python3-pip && rm -rf /var/lib/apt/lists/*
-
 ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-# Allow selecting a yt-dlp version at build or runtime
+# yt-dlp version (optional at build/runtime)
 ARG YTDLP_VERSION=latest
 ENV YTDLP_VERSION=${YTDLP_VERSION}
-
-# Default path for yt-dlp binary
 ENV YTDLP_PATH=./yt-dlp
 
-RUN groupadd -g 1001 nodejs
-RUN useradd -r -u 1001 -g nodejs nextjs
+RUN groupadd -g 1001 nodejs && useradd -r -u 1001 -g nodejs nextjs
 
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next ./.next
@@ -51,30 +46,27 @@ COPY ./entrypoint.sh /app/entrypoint.sh
 
 RUN chown -R nextjs:nodejs /app
 
-# If a build-time YTDLP_VERSION is provided, try downloading yt-dlp into the path.
+# Download yt-dlp binary (best effort)
 RUN if [ -n "$YTDLP_VERSION" ]; then \
     if [ "$YTDLP_VERSION" = "latest" ]; then \
-    YTDLP_URL="https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp"; \
+      YTDLP_URL="https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp"; \
     else \
-    YTDLP_URL="https://github.com/yt-dlp/yt-dlp/releases/download/${YTDLP_VERSION}/yt-dlp"; \
+      YTDLP_URL="https://github.com/yt-dlp/yt-dlp/releases/download/${YTDLP_VERSION}/yt-dlp"; \
     fi && \
     wget -q -O $YTDLP_PATH "$YTDLP_URL" && chmod +x $YTDLP_PATH || true; \
-    fi
+  fi
 
-# Ensure the downloaded binary (if any) is owned by the app user
 RUN if [ -f "$YTDLP_PATH" ]; then \
     chown nextjs:nodejs "$YTDLP_PATH" || true; \
     chmod +x "$YTDLP_PATH" || true; \
-    fi
+  fi
 
 USER nextjs
 
 EXPOSE 3000
 
-# Ensure cache dir exists
-RUN mkdir -p /app/node_modules/@xenova/.cache/
-RUN chmod 777 -R /app/node_modules/@xenova/
+# xenova cache dir (für lokale whisper / transformers)
+RUN mkdir -p /app/node_modules/@xenova/.cache/ && chmod 777 -R /app/node_modules/@xenova/
 
-# /bin/sh is available in Debian, but you can also use /bin/bash if your entrypoint needs it
 ENTRYPOINT ["/bin/sh","/app/entrypoint.sh"]
 CMD ["node", "--run", "start"]
