@@ -13,10 +13,39 @@ const client = createOpenAI({
 const transcriptionModel = client.transcription(env.TRANSCRIPTION_MODEL);
 const textModel = client.chat(env.TEXT_MODEL);
 
+const recipeSchema = z.object({
+  '@context': z.literal('https://schema.org').default('https://schema.org'),
+  '@type': z.literal('Recipe').default('Recipe'),
+  name: z.string(),
+  image: z.string().optional(),
+  url: z.string().optional(),
+  description: z.string(),
+  recipeIngredient: z.array(z.string()),
+  recipeInstructions: z.array(
+    z.object({
+      '@type': z.literal('HowToStep').default('HowToStep'),
+      text: z.string(),
+    }),
+  ),
+  keywords: z.array(z.string()).optional(),
+});
+
+type LocalTranscriber = any;
+
+let localTranscriberPromise: Promise<LocalTranscriber> | null = null;
+
+async function getLocalTranscriber(model: string) {
+  if (!localTranscriberPromise) {
+    localTranscriberPromise = pipeline('automatic-speech-recognition', model);
+  }
+
+  return localTranscriberPromise as Promise<LocalTranscriber>;
+}
+
 export async function getTranscription(blob: Blob): Promise<string> {
   if (env.LOCAL_TRANSCRIPTION_MODEL) {
     console.info('Using local Whisper model for transcription:', env.LOCAL_TRANSCRIPTION_MODEL);
-    const transcriber = await pipeline('automatic-speech-recognition', env.LOCAL_TRANSCRIPTION_MODEL);
+    const transcriber = await getLocalTranscriber(env.LOCAL_TRANSCRIPTION_MODEL);
     const arrayBuffer = Buffer.from(await blob.arrayBuffer());
 
     try {
@@ -60,30 +89,13 @@ export async function generateRecipeFromAI(
   extraPrompt: string,
   tags: string[],
 ) {
-  const schema = z.object({
-    '@context': z.literal('https://schema.org').default('https://schema.org'),
-    '@type': z.literal('Recipe').default('Recipe'),
-    name: z.string(),
-    image: z.string().optional(),
-    url: z.string().optional(),
-    description: z.string(),
-    recipeIngredient: z.array(z.string()),
-    recipeInstructions: z.array(
-      z.object({
-        '@type': z.literal('HowToStep').default('HowToStep'),
-        text: z.string(),
-      }),
-    ),
-    keywords: z.array(z.string()).optional(),
-  });
-
   const transcriptionBlock =
     transcription && transcription.trim().length > 0 ? transcription : '[No transcription available]';
 
   try {
     const { object } = await generateObject({
       model: textModel,
-      schema,
+      schema: recipeSchema,
       prompt: `
 You are an expert chef assistant. Review the following recipe transcript and refine it for clarity, conciseness, and accuracy.
 Ensure ingredients and instructions are well-formatted and easy to follow.
