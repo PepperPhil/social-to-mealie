@@ -66,3 +66,153 @@ export async function getRecipe(recipeSlug: string): Promise<recipeResult> {
         url: `${env.MEALIE_URL}/g/${env.MEALIE_GROUP_NAME}/r/${recipeSlug}`,
     };
 }
+
+function extractRecipeIdentifier(payload: any): string | null {
+    if (!payload) return null;
+
+    const candidates = [
+        payload.slug,
+        payload.recipeSlug,
+        payload.recipe_slug,
+        payload.id,
+        payload.recipeId,
+        payload.recipe_id,
+        payload?.recipe?.slug,
+        payload?.recipe?.id,
+    ];
+
+    const found = candidates.find((value) => typeof value === 'string' || typeof value === 'number');
+    return found ? String(found) : null;
+}
+
+export async function postRecipeImage(image: Blob, filename: string, tags: string[]) {
+    try {
+        const formData = new FormData();
+        formData.append('image', image, filename);
+
+        if (tags.length > 0) {
+            formData.append('tags', JSON.stringify(tags));
+        }
+
+        const res = await fetch(`${env.MEALIE_URL}/api/recipes/create/image`, {
+            method: 'POST',
+            headers: {
+                Authorization: `Bearer ${env.MEALIE_API_KEY}`,
+            },
+            body: formData,
+            signal: AbortSignal.timeout(120000),
+        });
+
+        if (!res.ok) {
+            const errorText = await res.text();
+            console.error(`${res.status} ${res.statusText} - ${errorText}`);
+            throw new Error('Failed to create recipe from image');
+        }
+
+        const body = await res.json();
+        const recipeIdentifier = extractRecipeIdentifier(body);
+
+        if (!recipeIdentifier) {
+            throw new Error('Unexpected response from Mealie image import.');
+        }
+
+        return recipeIdentifier;
+    } catch (error: any) {
+        if (error.name === 'AbortError') {
+            console.error(
+                'Timeout creating mealie recipe from image. Report this issue on Mealie GitHub.'
+            );
+            throw new Error(
+                `Timeout creating mealie recipe from image. Report this issue on Mealie GitHub. Input URL: ${env.MEALIE_URL}`
+            );
+        }
+        console.error('Error in postRecipeImage:', error);
+        throw new Error(error.message);
+    }
+}
+
+function normalizeRecipeList(payload: any): any[] {
+    if (!payload) return [];
+    if (Array.isArray(payload)) return payload;
+    if (Array.isArray(payload.items)) return payload.items;
+    if (Array.isArray(payload.data)) return payload.data;
+    if (Array.isArray(payload.results)) return payload.results;
+    return [];
+}
+
+function extractSourceUrl(candidate: any): string | null {
+    if (!candidate) return null;
+    const options = [
+        candidate.sourceUrl,
+        candidate.source_url,
+        candidate.url,
+        candidate.originalUrl,
+        candidate.original_url,
+    ];
+    const found = options.find((value) => typeof value === 'string' && value.length > 0);
+    return found ? String(found) : null;
+}
+
+function extractRecipeSlug(candidate: any): string | null {
+    if (!candidate) return null;
+    const options = [
+        candidate.slug,
+        candidate.recipeSlug,
+        candidate.recipe_slug,
+        candidate.id,
+        candidate.recipeId,
+        candidate.recipe_id,
+    ];
+    const found = options.find((value) => typeof value === 'string' || typeof value === 'number');
+    return found ? String(found) : null;
+}
+
+async function fetchRecipeSearchResults(query: string) {
+    const encoded = encodeURIComponent(query);
+    const endpoints = [
+        `${env.MEALIE_URL}/api/recipes?search=${encoded}`,
+        `${env.MEALIE_URL}/api/recipes?query=${encoded}`,
+    ];
+
+    for (const endpoint of endpoints) {
+        const res = await fetch(endpoint, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${env.MEALIE_API_KEY}`,
+            },
+        });
+
+        if (res.ok) {
+            return res.json();
+        }
+    }
+
+    return null;
+}
+
+export async function findRecipeIdentifierBySourceUrl(sourceUrl: string): Promise<string | null> {
+    const payload = await fetchRecipeSearchResults(sourceUrl);
+    const items = normalizeRecipeList(payload);
+
+    const normalizedSource = sourceUrl.trim().toLowerCase();
+    const match = items.find((item) => {
+        const candidateUrl = extractSourceUrl(item);
+        if (!candidateUrl) return false;
+        const normalizedCandidate = candidateUrl.trim().toLowerCase();
+        return normalizedCandidate === normalizedSource || normalizedCandidate.includes(normalizedSource);
+    });
+
+    return match ? extractRecipeSlug(match) : null;
+}
+
+export async function findRecipeBySourceUrl(sourceUrl: string): Promise<recipeResult | null> {
+    const identifier = await findRecipeIdentifierBySourceUrl(sourceUrl);
+    if (!identifier) return null;
+
+    try {
+        return await getRecipe(identifier);
+    } catch {
+        return null;
+    }
+}

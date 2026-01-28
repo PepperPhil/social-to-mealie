@@ -1,11 +1,8 @@
-import { findRecipeBySourceUrl, findRecipeIdentifierBySourceUrl, getRecipe, postRecipe } from '@/lib/mealie';
-import type { progressType, socialMediaResult } from '@/lib/types';
-import { generateRecipeFromAI, getTranscription } from '@/lib/ai';
-import { env } from '@/lib/constants';
-import { downloadMediaWithYtDlp } from '@/lib/yt-dlp';
+import { findRecipeBySourceUrl, getRecipe, postRecipeImage } from '@/lib/mealie';
+import type { progressType } from '@/lib/types';
 
 interface RequestBody {
-  url: string;
+  imageUrl?: string;
   tags: string[];
   force?: boolean;
 }
@@ -53,16 +50,24 @@ function addSourceTag(url: string, tags: string[]) {
   return [...tags, sourceTag];
 }
 
-async function handleRequest(
-  url: string,
+function filenameFromUrl(url: string) {
+  try {
+    const pathname = new URL(url).pathname;
+    const name = pathname.split('/').pop();
+    return name && name.trim().length > 0 ? name : 'upload.jpg';
+  } catch {
+    return 'upload.jpg';
+  }
+}
+
+async function handleImageRequest(
+  image: Blob,
+  filename: string,
   tags: string[],
-  force: boolean,
   isSse: boolean,
   controller?: ReadableStreamDefaultController
 ) {
   const encoder = new TextEncoder();
-  let socialMedia: socialMediaResult;
-
   const progress: progressType = {
     videoDownloaded: null,
     audioTranscribed: null,
@@ -84,69 +89,20 @@ async function handleRequest(
   try {
     send({ progress, logs });
 
-    const existingRecipeId = await findRecipeIdentifierBySourceUrl(url);
-    if (existingRecipeId && !force) {
-      const existingRecipe = await findRecipeBySourceUrl(url);
-      send({ duplicate: true, recipe: existingRecipe });
-
-      if (isSse && controller) {
-        controller.close();
-        return;
-      }
-
-      return new Response(JSON.stringify({ duplicate: true, recipe: existingRecipe }), { status: 409 });
-    }
-
-    // Step 1: Download / Extract
-    log('video', null, 'Download/Extract gestartet …');
-    socialMedia = await downloadMediaWithYtDlp(url);
+    log('video', null, 'Bild wird hochgeladen …');
     progress.videoDownloaded = true;
-    log('video', true, 'Media/Metadaten erfolgreich geladen.');
+    log('video', true, 'Bild erfolgreich geladen.');
     send({ progress, logs });
 
-    // Step 2: Transcribe (optional)
-    let transcription = '';
+    log('audio', null, 'Text wird aus dem Bild extrahiert …');
+    log('recipe', null, 'Rezept wird aus dem Bild extrahiert & nach Mealie gepostet …');
 
-    log('audio', null, 'Audio/Transkription wird geprüft …');
+    const mealieResponse = await postRecipeImage(image, filename, tags);
+    const createdRecipe = await getRecipe(mealieResponse);
 
-    const { blob: audioBlob } = socialMedia;
-
-    if (!audioBlob || audioBlob.size === 0) {
-      // Kein Audio -> wir überspringen Transkription, aber lassen Prozess weiterlaufen
-      progress.audioTranscribed = true;
-      log('audio', true, 'Kein Audiostream gefunden. Transkription übersprungen (Description-only).');
-      send({ progress, logs });
-    } else {
-      log('audio', null, 'Transkription gestartet …');
-      transcription = await getTranscription(audioBlob);
-      progress.audioTranscribed = true;
-      log('audio', true, 'Transkription erfolgreich.');
-      send({ progress, logs });
-    }
-
-    // Step 3: Generate + Post to Mealie
-    const normalizedDescription = socialMedia.description?.trim() ?? '';
-    const hasDescription =
-      normalizedDescription.length > 0 && normalizedDescription.toLowerCase() !== 'no description found';
-    const hasTranscription = transcription.trim().length > 0;
-
-    if (!hasDescription && !hasTranscription) {
-      throw new Error('Kein Rezepttext gefunden (weder Transkription noch Beschreibung).');
-    }
-
-    log('recipe', null, 'Rezept wird via KI erstellt & nach Mealie gepostet …');
-
-    const recipe = await generateRecipeFromAI(
-      transcription,
-      socialMedia.description,
-      url,
-      socialMedia.thumbnail,
-      env.EXTRA_PROMPT || '',
-      tags
-    );
-
-    const mealieResponse = await postRecipe(recipe);
-    const createdRecipe = await getRecipe(await mealieResponse);
+    progress.audioTranscribed = true;
+    log('audio', true, 'Text aus dem Bild extrahiert.');
+    send({ progress, logs });
 
     progress.recipeCreated = true;
     log('recipe', true, 'Rezept wurde in Mealie angelegt.');
@@ -184,17 +140,70 @@ async function handleRequest(
 }
 
 export async function POST(req: Request) {
-  const body: RequestBody = await req.json();
-  const url = body.url;
-  const tags = addSourceTag(url, body.tags ?? []);
-  const force = body.force ?? false;
+  const contentType = req.headers.get('Content-Type') ?? '';
+  let tags: string[] = [];
+  let image: Blob | null = null;
+  let filename = 'upload.jpg';
+  let imageUrl: string | undefined;
+  let force = false;
 
-  const contentType = req.headers.get('Content-Type');
+  if (contentType.includes('multipart/form-data')) {
+    const data = await req.formData();
+    const file = data.get('image');
+    const tagsRaw = data.get('tags');
+    const forceRaw = data.get('force');
+    if (typeof tagsRaw === 'string') {
+      try {
+        tags = JSON.parse(tagsRaw);
+      } catch {
+        tags = [];
+      }
+    }
+    if (typeof forceRaw === 'string') {
+      force = forceRaw === 'true';
+    }
+
+    if (!file || !(file instanceof Blob)) {
+      return new Response(JSON.stringify({ error: 'Kein Bild hochgeladen.' }), { status: 400 });
+    }
+
+    image = file;
+    filename = typeof (file as File).name === 'string' ? (file as File).name : filename;
+  } else {
+    const body: RequestBody = await req.json();
+    imageUrl = body.imageUrl;
+    force = body.force ?? false;
+
+    if (!imageUrl) {
+      return new Response(JSON.stringify({ error: 'Kein Bild-URL angegeben.' }), { status: 400 });
+    }
+
+    tags = addSourceTag(imageUrl, body.tags ?? []);
+    filename = filenameFromUrl(imageUrl);
+
+    if (!force) {
+      const existingRecipe = await findRecipeBySourceUrl(imageUrl);
+      if (existingRecipe) {
+        return new Response(JSON.stringify({ duplicate: true, recipe: existingRecipe }), { status: 409 });
+      }
+    }
+
+    const imageResponse = await fetch(imageUrl);
+    if (!imageResponse.ok) {
+      return new Response(JSON.stringify({ error: 'Bild konnte nicht geladen werden.' }), { status: 400 });
+    }
+
+    image = await imageResponse.blob();
+  }
+
+  if (!image) {
+    return new Response(JSON.stringify({ error: 'Bilddaten fehlen.' }), { status: 400 });
+  }
 
   if (contentType === 'text/event-stream') {
     const stream = new ReadableStream({
       async start(controller) {
-        await handleRequest(url, tags, force, true, controller);
+        await handleImageRequest(image as Blob, filename, tags, true, controller);
       },
     });
 
@@ -207,5 +216,5 @@ export async function POST(req: Request) {
     });
   }
 
-  return handleRequest(url, tags, force, false);
+  return handleImageRequest(image as Blob, filename, tags, false);
 }
