@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,6 +9,15 @@ import { Textarea } from '@/components/ui/textarea';
 import type { progressType, recipeResult } from '@/lib/types';
 import { CircleCheck, CircleX } from 'lucide-react';
 
+type StepKey = 'video' | 'audio' | 'recipe';
+
+type StepLog = {
+  step: StepKey;
+  ok: boolean | null;
+  message: string;
+  ts: number;
+};
+
 function extractFirstUrl(input: string): string | null {
   const m = input.match(/https?:\/\/\S+/i);
   return m ? m[0].replace(/[)\],.]*$/, '') : null;
@@ -16,9 +25,11 @@ function extractFirstUrl(input: string): string | null {
 
 export function RecipeFetcher({ tags }: { tags: string[] }) {
   const sp = useSearchParams();
+  const placeholderImage = '/recipe-placeholder.svg';
 
   const [urlInput, setUrlInput] = useState('');
   const [progress, setProgress] = useState<progressType | null>(null);
+  const [logs, setLogs] = useState<StepLog[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [recipes, setRecipe] = useState<recipeResult[] | null>(null);
   const [loading, setLoading] = useState(false);
@@ -39,6 +50,7 @@ export function RecipeFetcher({ tags }: { tags: string[] }) {
   async function fetchRecipe() {
     setLoading(true);
     setProgress(null);
+    setLogs([]);
     setError(null);
 
     const urlList: string[] = urlInput
@@ -76,6 +88,10 @@ export function RecipeFetcher({ tags }: { tags: string[] }) {
                 setProgress(data.progress);
               }
 
+              if (data.logs) {
+                setLogs(data.logs);
+              }
+
               if (data.name) {
                 setRecipe((recipes) => [...(recipes || []), data]);
                 setLoading(false);
@@ -98,6 +114,18 @@ export function RecipeFetcher({ tags }: { tags: string[] }) {
     }
   }
 
+  const latestLogByStep = useMemo(() => {
+    const map: Record<StepKey, StepLog | undefined> = {
+      video: undefined,
+      audio: undefined,
+      recipe: undefined,
+    };
+    logs.forEach((entry) => {
+      map[entry.step] = entry;
+    });
+    return map;
+  }, [logs]);
+
   return (
     <>
       <Textarea
@@ -117,36 +145,51 @@ export function RecipeFetcher({ tags }: { tags: string[] }) {
             <CardTitle>{error || 'Progress'}</CardTitle>
           </CardHeader>
           <CardContent className={'flex flex-col gap-4 justify-center items-center'}>
-            <p className={'flex gap-4'}>
-              Video downloaded{' '}
-              {progress.videoDownloaded === true ? (
-                <CircleCheck />
-              ) : progress.videoDownloaded === null ? (
-                <Spinner size={'small'} />
-              ) : (
-                <CircleX />
-              )}
-            </p>
-            <p className={'flex gap-4'}>
-              Audio transcribed{' '}
-              {progress.audioTranscribed === true ? (
-                <CircleCheck />
-              ) : progress.audioTranscribed === null ? (
-                <Spinner size={'small'} />
-              ) : (
-                <CircleX />
-              )}
-            </p>
-            <p className={'flex gap-4'}>
-              Recipe created{' '}
-              {progress.recipeCreated === true ? (
-                <CircleCheck />
-              ) : progress.recipeCreated === null ? (
-                <Spinner size={'small'} />
-              ) : (
-                <CircleX />
-              )}
-            </p>
+            <div className={'flex flex-col gap-1 text-sm'}>
+              <div className={'flex items-center gap-4'}>
+                <span>Video downloaded</span>
+                {progress.videoDownloaded === true ? (
+                  <CircleCheck />
+                ) : progress.videoDownloaded === null ? (
+                  <Spinner size={'small'} />
+                ) : (
+                  <CircleX />
+                )}
+              </div>
+              {latestLogByStep.video?.message ? (
+                <span className="text-xs opacity-70">{latestLogByStep.video.message}</span>
+              ) : null}
+            </div>
+            <div className={'flex flex-col gap-1 text-sm'}>
+              <div className={'flex items-center gap-4'}>
+                <span>Audio transcribed</span>
+                {progress.audioTranscribed === true ? (
+                  <CircleCheck />
+                ) : progress.audioTranscribed === null ? (
+                  <Spinner size={'small'} />
+                ) : (
+                  <CircleX />
+                )}
+              </div>
+              {latestLogByStep.audio?.message ? (
+                <span className="text-xs opacity-70">{latestLogByStep.audio.message}</span>
+              ) : null}
+            </div>
+            <div className={'flex flex-col gap-1 text-sm'}>
+              <div className={'flex items-center gap-4'}>
+                <span>Recipe created</span>
+                {progress.recipeCreated === true ? (
+                  <CircleCheck />
+                ) : progress.recipeCreated === null ? (
+                  <Spinner size={'small'} />
+                ) : (
+                  <CircleX />
+                )}
+              </div>
+              {latestLogByStep.recipe?.message ? (
+                <span className="text-xs opacity-70">{latestLogByStep.recipe.message}</span>
+              ) : null}
+            </div>
           </CardContent>
         </Card>
       )}
@@ -157,7 +200,15 @@ export function RecipeFetcher({ tags }: { tags: string[] }) {
             <a href={recipe.url} key={recipe.url} target='_blank' rel='noreferrer'>
               <Card className='mt-4 w-60'>
                 <CardHeader>
-                  <img src={recipe.imageUrl} alt={recipe.description} className='aspect-square object-cover' />
+                  <img
+                    src={recipe.imageUrl}
+                    alt={recipe.description}
+                    className='aspect-square object-cover'
+                    onError={(event) => {
+                      event.currentTarget.onerror = null;
+                      event.currentTarget.src = placeholderImage;
+                    }}
+                  />
                   <CardTitle>{recipe.name}</CardTitle>
                   <CardDescription>{recipe.description}</CardDescription>
                 </CardHeader>

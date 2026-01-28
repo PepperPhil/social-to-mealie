@@ -62,7 +62,7 @@ export async function getRecipe(recipeSlug: string): Promise<recipeResult> {
     return {
         name: body.name,
         description: body.description,
-        imageUrl: `${env.MEALIE_URL}/api/media/recipes/${body.id}/images/original.webp`,
+        imageUrl: `/api/recipe-image/${body.id}`,
         url: `${env.MEALIE_URL}/g/${env.MEALIE_GROUP_NAME}/r/${recipeSlug}`,
     };
 }

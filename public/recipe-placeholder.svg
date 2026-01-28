@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="480" viewBox="0 0 480 480" role="img" aria-labelledby="title desc">
+  <title id="title">Rezeptbild nicht verfügbar</title>
+  <desc id="desc">Ein Platzhalterbild, wenn kein Rezeptfoto vorhanden ist.</desc>
+  <rect width="480" height="480" fill="#1f1f1f" />
+  <rect x="64" y="96" width="352" height="288" rx="24" fill="#2f2f2f" stroke="#3f3f3f" stroke-width="4" />
+  <circle cx="176" cy="192" r="28" fill="#505050" />
+  <path d="M128 312l72-80 64 64 40-40 72 88H128z" fill="#505050" />
+  <text x="240" y="356" fill="#bdbdbd" font-size="20" font-family="Arial, sans-serif" text-anchor="middle">
+    Bild nicht verfügbar
+  </text>
+</svg>
