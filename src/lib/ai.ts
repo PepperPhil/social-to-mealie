@@ -2,7 +2,6 @@ import { env } from './constants';
 import { createOpenAI } from '@ai-sdk/openai';
 import { experimental_transcribe, generateObject } from 'ai';
 import { z } from 'zod';
-import { pipeline } from '@huggingface/transformers';
 import { WaveFile } from 'wavefile';
 
 const client = createOpenAI({
