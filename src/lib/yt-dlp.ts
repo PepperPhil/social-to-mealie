@@ -12,10 +12,17 @@ const writeFileAsync = promisify(fs.writeFile);
 const readFileAsync = promisify(fs.readFile);
 const unlinkAsync = promisify(fs.unlink);
 
-const ytdlp = new YtDlp({
-  ffmpegPath: env.FFMPEG_PATH,
-  binaryPath: env.YTDLP_PATH,
-});
+let ytdlpInstance: YtDlp | null = null;
+
+function getYtDlp(): YtDlp {
+  if (!ytdlpInstance) {
+    ytdlpInstance = new YtDlp({
+      ffmpegPath: env.FFMPEG_PATH,
+      binaryPath: env.YTDLP_PATH,
+    });
+  }
+  return ytdlpInstance;
+}
 
 function hasAudioStream(metadata: VideoInfo): boolean {
   const directCodec = (metadata as any)?.acodec;
@@ -81,7 +88,7 @@ async function convertBufferToWav(inputBuffer: Uint8Array, fileExt = ''): Promis
 async function getAudioFileBytes(url: string): Promise<Uint8Array> {
   // 1) Versuch: nur Audio-Formate (m4a bevorzugt), keine stummen Streams
   try {
-    const audioFile = await ytdlp.getFileAsync(url, {
+    const audioFile = await getYtDlp().getFileAsync(url, {
       // je nach lib: format kann als string gut funktionieren
       format: 'bestaudio[acodec!=none][ext=m4a]/bestaudio[acodec!=none]/best[acodec!=none]',
       cookies: env.COOKIES,
@@ -93,7 +100,7 @@ async function getAudioFileBytes(url: string): Promise<Uint8Array> {
   }
 
   // 2) Fallback: best mit Audio (kann Video sein), dann extrahiert ffmpeg Audio falls vorhanden
-  const file = await ytdlp.getFileAsync(url, {
+  const file = await getYtDlp().getFileAsync(url, {
     format: 'best[acodec!=none]/best',
     cookies: env.COOKIES,
   } as any);
@@ -113,13 +120,15 @@ function isImageMetadata(metadata: VideoInfo): boolean {
 
 export async function downloadMediaWithYtDlp(url: string): Promise<socialMediaResult> {
   try {
-    const metadata = (await ytdlp.execAsync(url, {
+    const execResult = await getYtDlp().execAsync(url, {
       cookies: env.COOKIES,
       ignoreNoFormatsError: true,
       skipDownload: true,
     });
     const metadata: VideoInfo =
-      typeof execResult === 'string' ? JSON.parse(execResult) : (execResult as VideoInfo);
+      typeof execResult === 'string'
+        ? (JSON.parse(execResult) as VideoInfo)
+        : (execResult as unknown as VideoInfo);
 
     if (isImageMetadata(metadata)) {
       return {
