@@ -34,7 +34,7 @@ export type progressType = {
 };
 
 export type socialMediaResult = {
-    blob: Blob;
+    blob: Blob | null;
     thumbnail: string;
     description: string;
     title: string;
