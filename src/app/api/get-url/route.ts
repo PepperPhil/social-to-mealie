@@ -22,6 +22,36 @@ function now() {
   return Date.now();
 }
 
+function getSourceTag(url: string) {
+  try {
+    const hostname = new URL(url).hostname.replace(/^www\./, '').toLowerCase();
+    const normalizedHost = hostname.replace(/^m\./, '');
+    const hostAliases: Record<string, string> = {
+      'youtu.be': 'youtube',
+    };
+    const alias = hostAliases[normalizedHost];
+    const hostParts = (alias ?? normalizedHost).split('.').filter(Boolean);
+    const base = hostParts.length >= 2 ? hostParts[hostParts.length - 2] : hostParts[0];
+
+    if (!base) return null;
+
+    const formatted = base.charAt(0).toUpperCase() + base.slice(1);
+    return `#${formatted}`;
+  } catch {
+    return null;
+  }
+}
+
+function addSourceTag(url: string, tags: string[]) {
+  const sourceTag = getSourceTag(url);
+  if (!sourceTag) return tags;
+
+  const normalized = new Set(tags.map((tag) => tag.trim().toLowerCase()));
+  if (normalized.has(sourceTag.toLowerCase())) return tags;
+
+  return [...tags, sourceTag];
+}
+
 async function handleRequest(
   url: string,
   tags: string[],
@@ -141,7 +171,7 @@ async function handleRequest(
 export async function POST(req: Request) {
   const body: RequestBody = await req.json();
   const url = body.url;
-  const tags = body.tags ?? [];
+  const tags = addSourceTag(url, body.tags ?? []);
 
   const contentType = req.headers.get('Content-Type');
 
