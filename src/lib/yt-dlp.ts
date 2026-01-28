@@ -17,6 +17,16 @@ const ytdlp = new YtDlp({
   binaryPath: env.YTDLP_PATH,
 });
 
+function hasAudioStream(metadata: VideoInfo): boolean {
+  const directCodec = (metadata as any)?.acodec;
+  if (directCodec && directCodec !== 'none') return true;
+
+  const formats = (metadata as any)?.formats;
+  if (!Array.isArray(formats)) return false;
+
+  return formats.some((format: any) => format?.acodec && format.acodec !== 'none');
+}
+
 async function convertBufferToWav(inputBuffer: Uint8Array, fileExt = ''): Promise<Buffer> {
   const tempDir = os.tmpdir();
   const ext = fileExt ? (fileExt.startsWith('.') ? fileExt : `.${fileExt}`) : '';
@@ -93,13 +103,18 @@ export async function downloadMediaWithYtDlp(url: string): Promise<socialMediaRe
       cookies: env.COOKIES,
     })) as VideoInfo;
 
-    const bytes = await getAudioFileBytes(url);
+    const audioAvailable = hasAudioStream(metadata);
+    let audioBlob = new Blob([], { type: 'audio/wav' });
 
-    // ext aus metadata ist oft "mp4" – wir hängen sie dran, damit ffmpeg den Container leichter erkennt
-    const wavBuffer = await convertBufferToWav(bytes, metadata.ext || '');
+    if (audioAvailable) {
+      const bytes = await getAudioFileBytes(url);
+      // ext aus metadata ist oft "mp4" – wir hängen sie dran, damit ffmpeg den Container leichter erkennt
+      const wavBuffer = await convertBufferToWav(bytes, metadata.ext || '');
+      audioBlob = new Blob([new Uint8Array(wavBuffer)], { type: 'audio/wav' });
+    }
 
     return {
-      blob: new Blob([new Uint8Array(wavBuffer)], { type: 'audio/wav' }),
+      blob: audioBlob,
       thumbnail: metadata.thumbnail,
       description: metadata.description || 'No description found',
       title: metadata.title,
