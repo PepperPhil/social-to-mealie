@@ -104,7 +104,7 @@ export async function downloadMediaWithYtDlp(url: string): Promise<socialMediaRe
     })) as VideoInfo;
 
     const audioAvailable = hasAudioStream(metadata);
-    let audioBlob: Blob | null = null;
+    let audioBlob = new Blob([], { type: 'audio/wav' });
 
     if (audioAvailable) {
       const bytes = await getAudioFileBytes(url);
