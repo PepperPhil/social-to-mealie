@@ -8,25 +8,20 @@ export default async function Page({
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
   const sp = await searchParams;
-
   const tagQuery = sp.tagQuery as string | undefined;
   const tags = (sp.tags as string)?.split(',').filter(Boolean) ?? [];
 
-  // Share-Target Params (/share redirectet auf /?url=...&autostart=1)
-  const sharedUrl = sp.url as string | undefined;
-  const autostart = sp.autostart === '1';
-
   return (
-    <div className='flex flex-col items-center justify-center h-screen'>
-      <h1 className='text-3xl font-bold'>Welcome to social to Mealie</h1>
+    <div className="flex flex-col items-center justify-center h-screen">
+      <h1 className="text-3xl font-bold">Welcome to social to Mealie</h1>
 
-      {/* startet automatisch, wenn autostart=1 */}
-      <ShareImportRunner tags={tags} sharedUrl={sharedUrl} autostart={autostart} />
+      {/* PWA Share-Import Runner: liest ?url=...&autostart=1 intern via AutoImport */}
+      <ShareImportRunner tags={tags} />
 
-      {/* zeigt die URL im Textfeld an */}
-      <RecipeFetcher tags={tags} sharedUrl={sharedUrl} />
+      {/* Manuelles Einfügen bleibt */}
+      <RecipeFetcher tags={tags} />
 
-      <div className='w-fit min-w-96 m-4'>
+      <div className="w-fit min-w-96 m-4">
         <GetTagSelect query={tagQuery} />
       </div>
     </div>
