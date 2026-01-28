@@ -117,7 +117,9 @@ export async function downloadMediaWithYtDlp(url: string): Promise<socialMediaRe
       cookies: env.COOKIES,
       ignoreNoFormatsError: true,
       skipDownload: true,
-    })) as VideoInfo;
+    });
+    const metadata: VideoInfo =
+      typeof execResult === 'string' ? JSON.parse(execResult) : (execResult as VideoInfo);
 
     if (isImageMetadata(metadata)) {
       return {
