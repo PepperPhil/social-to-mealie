@@ -33,17 +33,21 @@ type LocalTranscriber = (
   audio: Float32Array | Float32Array[] | number[] | number[][],
 ) => Promise<{ text?: string } | string>;
 
+type TransformerPipeline = (
+  task: 'automatic-speech-recognition' | string,
+  model: string,
+) => Promise<LocalTranscriber>;
+
 let localTranscriberPromise: Promise<LocalTranscriber> | null = null;
 let localTranscriberModel: string | null = null;
 
 async function getLocalTranscriber(model: string): Promise<LocalTranscriber> {
   if (!localTranscriberPromise || localTranscriberModel !== model) {
     localTranscriberModel = model;
-    const { pipeline } = await import('@huggingface/transformers');
-    localTranscriberPromise = pipeline(
-      'automatic-speech-recognition',
-      model,
-    ) as unknown as Promise<LocalTranscriber>;
+    const { pipeline } = (await import('@huggingface/transformers')) as unknown as {
+      pipeline: TransformerPipeline;
+    };
+    localTranscriberPromise = pipeline('automatic-speech-recognition', model);
   }
 
   return localTranscriberPromise;
