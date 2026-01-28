@@ -113,9 +113,13 @@ function isImageMetadata(metadata: VideoInfo): boolean {
 
 export async function downloadMediaWithYtDlp(url: string): Promise<socialMediaResult> {
   try {
-    const metadata = (await ytdlp.getInfoAsync(url, {
+    const infoOptions = {
       cookies: env.COOKIES,
-    })) as VideoInfo;
+      ignoreNoFormatsError: true,
+      skipDownload: true,
+    } as any;
+
+    const metadata = (await ytdlp.getInfoAsync(url, infoOptions)) as VideoInfo;
 
     if (isImageMetadata(metadata)) {
       return {
