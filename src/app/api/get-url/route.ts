@@ -80,6 +80,15 @@ async function handleRequest(
     }
 
     // Step 3: Generate + Post to Mealie
+    const normalizedDescription = socialMedia.description?.trim() ?? '';
+    const hasDescription =
+      normalizedDescription.length > 0 && normalizedDescription.toLowerCase() !== 'no description found';
+    const hasTranscription = transcription.trim().length > 0;
+
+    if (!hasDescription && !hasTranscription) {
+      throw new Error('Kein Rezepttext gefunden (weder Transkription noch Beschreibung).');
+    }
+
     log('recipe', null, 'Rezept wird via KI erstellt & nach Mealie gepostet …');
 
     const recipe = await generateRecipeFromAI(
