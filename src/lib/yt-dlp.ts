@@ -115,11 +115,9 @@ export async function downloadMediaWithYtDlp(url: string): Promise<socialMediaRe
   try {
     const infoJson = await ytdlp.execAsync(url, {
       cookies: env.COOKIES,
-      dumpJson: true,
-      skipDownload: true,
       ignoreNoFormatsError: true,
-    });
-    const metadata = JSON.parse(infoJson) as VideoInfo;
+      skipDownload: true,
+    })) as VideoInfo;
 
     if (isImageMetadata(metadata)) {
       return {
