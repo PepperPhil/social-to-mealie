@@ -1,9 +1,9 @@
-import { env } from "./constants";
-import { createOpenAI } from "@ai-sdk/openai";
-import { experimental_transcribe, generateObject } from "ai";
-import { z } from "zod";
-import { pipeline } from "@huggingface/transformers";
-import { WaveFile } from "wavefile";
+import { env } from './constants';
+import { createOpenAI } from '@ai-sdk/openai';
+import { experimental_transcribe, generateObject } from 'ai';
+import { z } from 'zod';
+import { pipeline } from '@huggingface/transformers';
+import { WaveFile } from 'wavefile';
 
 const client = createOpenAI({
   baseURL: env.OPENAI_URL,
@@ -15,24 +15,24 @@ const textModel = client.chat(env.TEXT_MODEL);
 
 export async function getTranscription(blob: Blob): Promise<string> {
   if (env.LOCAL_TRANSCRIPTION_MODEL) {
-    console.info("Using local Whisper model for transcription:", env.LOCAL_TRANSCRIPTION_MODEL);
-    const transcriber = await pipeline("automatic-speech-recognition", env.LOCAL_TRANSCRIPTION_MODEL);
+    console.info('Using local Whisper model for transcription:', env.LOCAL_TRANSCRIPTION_MODEL);
+    const transcriber = await pipeline('automatic-speech-recognition', env.LOCAL_TRANSCRIPTION_MODEL);
     const arrayBuffer = Buffer.from(await blob.arrayBuffer());
 
     try {
       const wav = new WaveFile(new Uint8Array(arrayBuffer));
-      wav.toBitDepth("32f");
+      wav.toBitDepth('32f');
       wav.toSampleRate(16000);
       const audioData: any = wav.getSamples();
       const result = await transcriber(audioData);
 
-      if (result && typeof result === "object" && "text" in result) {
+      if (result && typeof result === 'object' && 'text' in result) {
         return (result as any).text;
       }
 
       return String(result);
     } catch (err) {
-      console.error("Error transcribing with local Whisper model:", err);
+      console.error('Error transcribing with local Whisper model:', err);
       throw err;
     }
   }
@@ -47,8 +47,8 @@ export async function getTranscription(blob: Blob): Promise<string> {
 
     return result.text;
   } catch (error) {
-    console.error("Error in getTranscription (AI SDK):", error);
-    throw new Error("Failed to transcribe audio via API");
+    console.error('Error in getTranscription (AI SDK):', error);
+    throw new Error('Failed to transcribe audio via API');
   }
 }
 
@@ -61,8 +61,8 @@ export async function generateRecipeFromAI(
   tags: string[],
 ) {
   const schema = z.object({
-    "@context": z.literal("https://schema.org").default("https://schema.org"),
-    "@type": z.literal("Recipe").default("Recipe"),
+    '@context': z.literal('https://schema.org').default('https://schema.org'),
+    '@type': z.literal('Recipe').default('Recipe'),
     name: z.string(),
     image: z.string().optional(),
     url: z.string().optional(),
@@ -70,7 +70,7 @@ export async function generateRecipeFromAI(
     recipeIngredient: z.array(z.string()),
     recipeInstructions: z.array(
       z.object({
-        "@type": z.literal("HowToStep").default("HowToStep"),
+        '@type': z.literal('HowToStep').default('HowToStep'),
         text: z.string(),
       }),
     ),
@@ -78,7 +78,7 @@ export async function generateRecipeFromAI(
   });
 
   const transcriptionBlock =
-    transcription && transcription.trim().length > 0 ? transcription : "[No transcription available]";
+    transcription && transcription.trim().length > 0 ? transcription : '[No transcription available]';
 
   try {
     const { object } = await generateObject({
@@ -107,11 +107,11 @@ Important:
 - If the description does not contain ingredient amounts, use reasonable standard amounts and make steps generic but useful.
 
 ${
-  tags && tags.length > 0 && Array.isArray(tags) ? `<keywords>${tags.join(", ")}</keywords>` : ""
+  tags && tags.length > 0 && Array.isArray(tags) ? `<keywords>${tags.join(', ')}</keywords>` : ''
 }
 
 ${
-  tags && (tags as any).length > 0 && !Array.isArray(tags) ? `<keywords>${String(tags)}</keywords>` : ""
+  tags && (tags as any).length > 0 && !Array.isArray(tags) ? `<keywords>${String(tags)}</keywords>` : ''
 }
 
 Use the thumbnail for the image field and the post URL for the url field.
@@ -121,14 +121,14 @@ ${
   extraPrompt.length > 1
     ? `Also the user requests that:
 ${extraPrompt}`
-    : ""
+    : ''
 }
       `,
     });
 
     return object;
   } catch (error) {
-    console.error("Error generating recipe with AI:", error);
-    throw new Error("Failed to generate recipe structure");
+    console.error('Error generating recipe with AI:', error);
+    throw new Error('Failed to generate recipe structure');
   }
 }
