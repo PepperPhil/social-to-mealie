@@ -127,10 +127,15 @@ function isImageMetadata(metadata: VideoInfo): boolean {
 // Hauptfunktion: lädt Metadaten, erkennt Bild/Video und liefert Audio/Thumbnail zurück.
 export async function downloadMediaWithYtDlp(url: string): Promise<socialMediaResult> {
   try {
-    const metadata = (await getYtDlp().getInfoAsync(url, {
-      cookies: env.COOKIES,
-      ignoreNoFormatsError: true,
-    })) as VideoInfo;
+    // Wir holen zuerst Metadaten, um Bild-Posts früh zu erkennen und unnötige Downloads zu vermeiden.
+    const metadata = (await getYtDlp().getInfoAsync(
+      url,
+      {
+        cookies: env.COOKIES,
+        // ignoreNoFormatsError ist runtime-valid, aber im Typing fehlt es, daher any.
+        ignoreNoFormatsError: true,
+      } as any
+    )) as VideoInfo;
 
     if (isImageMetadata(metadata)) {
       return {
