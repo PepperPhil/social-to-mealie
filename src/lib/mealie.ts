@@ -167,6 +167,19 @@ function extractRecipeSlug(candidate: any): string | null {
     return found ? String(found) : null;
 }
 
+function normalizeSourceUrl(sourceUrl: string): string {
+    // Normalize URLs to avoid duplicates caused by tracking params, casing, or trailing slashes.
+    try {
+        const parsed = new URL(sourceUrl.trim());
+        const hostname = parsed.hostname.replace(/^www\./, '').replace(/^m\./, '').toLowerCase();
+        const trimmedPath = parsed.pathname.replace(/\/+$/, '');
+        const normalizedPath = trimmedPath === '' ? '' : trimmedPath;
+        return `${parsed.protocol}//${hostname}${normalizedPath}`;
+    } catch {
+        return sourceUrl.trim().toLowerCase().replace(/\/+$/, '');
+    }
+}
+
 async function fetchRecipeSearchResults(query: string) {
     const encoded = encodeURIComponent(query);
     const endpoints = [
@@ -192,18 +205,25 @@ async function fetchRecipeSearchResults(query: string) {
 }
 
 export async function findRecipeIdentifierBySourceUrl(sourceUrl: string): Promise<string | null> {
-    const payload = await fetchRecipeSearchResults(sourceUrl);
-    const items = normalizeRecipeList(payload);
+    // Query with normalized URLs first so search + comparison remain consistent across variants.
+    const normalizedSource = normalizeSourceUrl(sourceUrl);
+    const searchQueries = Array.from(new Set([normalizedSource, sourceUrl.trim()]));
 
-    const normalizedSource = sourceUrl.trim().toLowerCase();
-    const match = items.find((item) => {
-        const candidateUrl = extractSourceUrl(item);
-        if (!candidateUrl) return false;
-        const normalizedCandidate = candidateUrl.trim().toLowerCase();
-        return normalizedCandidate === normalizedSource || normalizedCandidate.includes(normalizedSource);
-    });
+    for (const query of searchQueries) {
+        const payload = await fetchRecipeSearchResults(query);
+        const items = normalizeRecipeList(payload);
 
-    return match ? extractRecipeSlug(match) : null;
+        const match = items.find((item) => {
+            const candidateUrl = extractSourceUrl(item);
+            if (!candidateUrl) return false;
+            const normalizedCandidate = normalizeSourceUrl(candidateUrl);
+            return normalizedCandidate === normalizedSource;
+        });
+
+        if (match) return extractRecipeSlug(match);
+    }
+
+    return null;
 }
 
 export async function findRecipeBySourceUrl(sourceUrl: string): Promise<recipeResult | null> {
