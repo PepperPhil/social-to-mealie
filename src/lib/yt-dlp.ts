@@ -14,6 +14,7 @@ const unlinkAsync = promisify(fs.unlink);
 
 let ytdlpInstance: YtDlp | null = null;
 
+// Erstellt (lazy) eine einzige yt-dlp Instanz mit den konfigurierten Binärpfaden.
 function getYtDlp(): YtDlp {
   if (!ytdlpInstance) {
     ytdlpInstance = new YtDlp({
@@ -24,6 +25,7 @@ function getYtDlp(): YtDlp {
   return ytdlpInstance;
 }
 
+// Prüft, ob in den Metadaten ein Audio-Stream vorhanden ist.
 function hasAudioStream(metadata: VideoInfo): boolean {
   const directCodec = (metadata as any)?.acodec;
   if (directCodec && directCodec !== 'none') return true;
@@ -34,6 +36,7 @@ function hasAudioStream(metadata: VideoInfo): boolean {
   return formats.some((format: any) => format?.acodec && format.acodec !== 'none');
 }
 
+// Konvertiert beliebiges Audio/Video (Buffer) in eine Mono-WAV-Datei (16kHz).
 async function convertBufferToWav(inputBuffer: Uint8Array, fileExt = ''): Promise<Buffer> {
   const tempDir = os.tmpdir();
   const ext = fileExt ? (fileExt.startsWith('.') ? fileExt : `.${fileExt}`) : '';
@@ -85,6 +88,7 @@ async function convertBufferToWav(inputBuffer: Uint8Array, fileExt = ''): Promis
   }
 }
 
+// Lädt die besten verfügbaren Audio-Bytes von einer URL via yt-dlp.
 async function getAudioFileBytes(url: string): Promise<Uint8Array> {
   // 1) Versuch: nur Audio-Formate (m4a bevorzugt), keine stummen Streams
   try {
@@ -108,8 +112,10 @@ async function getAudioFileBytes(url: string): Promise<Uint8Array> {
   return await file.bytes();
 }
 
+// Dateiendungen, die wir als Bild-Download erkennen.
 const imageExtensions = new Set(['jpg', 'jpeg', 'png', 'webp', 'gif']);
 
+// Prüft anhand von Extension + vcodec, ob es sich um ein Bild handelt.
 function isImageMetadata(metadata: VideoInfo): boolean {
   const ext = metadata.ext?.toLowerCase();
   if (!ext || !imageExtensions.has(ext)) return false;
@@ -118,17 +124,13 @@ function isImageMetadata(metadata: VideoInfo): boolean {
   return !vcodec || vcodec === 'none';
 }
 
+// Hauptfunktion: lädt Metadaten, erkennt Bild/Video und liefert Audio/Thumbnail zurück.
 export async function downloadMediaWithYtDlp(url: string): Promise<socialMediaResult> {
   try {
-    const execResult = await getYtDlp().execAsync(url, {
+    const metadata = (await getYtDlp().getInfoAsync(url, {
       cookies: env.COOKIES,
       ignoreNoFormatsError: true,
-      skipDownload: true,
-    });
-    const metadata: VideoInfo =
-      typeof execResult === 'string'
-        ? (JSON.parse(execResult) as VideoInfo)
-        : (execResult as unknown as VideoInfo);
+    })) as VideoInfo;
 
     if (isImageMetadata(metadata)) {
       return {
