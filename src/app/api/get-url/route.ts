@@ -199,7 +199,7 @@ async function handleRequest(
     );
 
     const mealieResponse = await postRecipe(recipe);
-    const createdRecipe = await getRecipe(await mealieResponse);
+    const createdRecipe = await getRecipe(mealieResponse);
 
     progress.recipeCreated = true;
     log('recipe', true, 'Rezept wurde in Mealie angelegt.');
