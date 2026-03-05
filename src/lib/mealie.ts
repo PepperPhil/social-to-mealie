@@ -59,6 +59,7 @@ export async function getRecipe(recipeSlug: string): Promise<recipeResult> {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${env.MEALIE_API_KEY}`,
         },
+        signal: AbortSignal.timeout(30_000),
     });
 
     const body = await res.json();
@@ -74,6 +75,7 @@ export async function getRecipe(recipeSlug: string): Promise<recipeResult> {
 
 function extractRecipeIdentifier(payload: any): string | null {
     if (!payload) return null;
+    if (typeof payload === 'string' || typeof payload === 'number') return String(payload);
 
     const candidates = [
         payload.slug,

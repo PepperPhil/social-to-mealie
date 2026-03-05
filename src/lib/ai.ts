@@ -107,6 +107,7 @@ export async function generateRecipeFromAI(
     const { object } = await generateObject({
       model: textModel,
       schema: recipeSchema,
+      abortSignal: AbortSignal.timeout(120_000),
       prompt: `
 You are an expert chef assistant. Review the following recipe transcript and refine it for clarity, conciseness, and accuracy.
 Ensure ingredients and instructions are well-formatted and easy to follow.
