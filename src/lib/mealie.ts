@@ -32,7 +32,12 @@ export async function postRecipe(recipeData: any) {
         }
         const body = await res.json();
         console.log('Recipe response:', body);
-        return body;
+
+        const recipeIdentifier = extractRecipeIdentifier(body);
+        if (!recipeIdentifier) {
+            throw new Error('Unexpected response from Mealie recipe creation.');
+        }
+        return recipeIdentifier;
     } catch (error: any) {
         if (error.name === 'AbortError') {
             console.error(
