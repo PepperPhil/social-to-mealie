@@ -18,6 +18,10 @@ export type envTypes = {
     EXTRA_PROMPT: string;
     COOKIES: string;
     LOCAL_TRANSCRIPTION_MODEL: string;
+    VAPID_PUBLIC_KEY: string;
+    VAPID_PRIVATE_KEY: string;
+    VAPID_SUBJECT: string;
+    DATA_DIR: string;
 };
 
 export type recipeResult = {

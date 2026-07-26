@@ -100,16 +100,23 @@ export function RecipeFetcher({ tags }: { tags: string[] }) {
 
         if (!reader) throw new Error('No readable stream available');
 
+        let buffer = '';
+
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
 
-          const chunk = decoder.decode(value);
-          chunk.split('\n\n').forEach((event) => {
+          // Buffer across chunk boundaries: a single SSE event can be split across
+          // multiple network reads, so we only parse complete "\n\n"-terminated events.
+          buffer += decoder.decode(value, { stream: true });
+          const events = buffer.split('\n\n');
+          buffer = events.pop() ?? '';
+
+          events.forEach((event) => {
             if (!event.startsWith('data: ')) return;
 
             try {
-              const data = JSON.parse(event.replace('data: ', ''));
+              const data = JSON.parse(event.slice(6));
 
               if (data.progress) {
                 setProgress(data.progress);

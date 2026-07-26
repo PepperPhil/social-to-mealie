@@ -35,8 +35,13 @@ ENV HOSTNAME="0.0.0.0"
 ARG YTDLP_VERSION=latest
 ENV YTDLP_VERSION=${YTDLP_VERSION}
 ENV YTDLP_PATH=./yt-dlp
+ENV DATA_DIR=/app/data
 
 RUN groupadd -g 1001 nodejs && useradd -r -u 1001 -g nodejs nextjs
+
+# Persists push-notification subscriptions across restarts. Mount a volume here if you want
+# "notify when a recipe was imported" to survive container recreation.
+RUN mkdir -p /app/data && chown -R nextjs:nodejs /app/data
 
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next ./.next

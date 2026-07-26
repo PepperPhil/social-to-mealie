@@ -1,4 +1,6 @@
 import { findRecipeBySourceUrl, getRecipe, postRecipeImage } from '@/lib/mealie';
+import { addSourceTag, filenameFromUrl } from '@/lib/social-source';
+import { sendPushToAll } from '@/lib/push';
 import type { progressType } from '@/lib/types';
 
 interface RequestBody {
@@ -18,46 +20,6 @@ type StepLog = {
 
 function now() {
   return Date.now();
-}
-
-function getSourceTag(url: string) {
-  try {
-    const hostname = new URL(url).hostname.replace(/^www\./, '').toLowerCase();
-    const normalizedHost = hostname.replace(/^m\./, '');
-    const hostAliases: Record<string, string> = {
-      'youtu.be': 'youtube',
-    };
-    const alias = hostAliases[normalizedHost];
-    const hostParts = (alias ?? normalizedHost).split('.').filter(Boolean);
-    const base = hostParts.length >= 2 ? hostParts[hostParts.length - 2] : hostParts[0];
-
-    if (!base) return null;
-
-    const formatted = base.charAt(0).toUpperCase() + base.slice(1);
-    return `#${formatted}`;
-  } catch {
-    return null;
-  }
-}
-
-function addSourceTag(url: string, tags: string[]) {
-  const sourceTag = getSourceTag(url);
-  if (!sourceTag) return tags;
-
-  const normalized = new Set(tags.map((tag) => tag.trim().toLowerCase()));
-  if (normalized.has(sourceTag.toLowerCase())) return tags;
-
-  return [...tags, sourceTag];
-}
-
-function filenameFromUrl(url: string) {
-  try {
-    const pathname = new URL(url).pathname;
-    const name = pathname.split('/').pop();
-    return name && name.trim().length > 0 ? name : 'upload.jpg';
-  } catch {
-    return 'upload.jpg';
-  }
 }
 
 async function handleImageRequest(
@@ -109,6 +71,12 @@ async function handleImageRequest(
     send({ progress, logs });
     send(createdRecipe);
 
+    sendPushToAll({
+      title: 'Rezept übertragen ✅',
+      body: `„${createdRecipe.name}" wurde zu Mealie hinzugefügt.`,
+      url: createdRecipe.url,
+    }).catch((err) => console.error('Failed to send push notification:', err));
+
     if (isSse && controller) {
       controller.close();
       return;
@@ -129,6 +97,12 @@ async function handleImageRequest(
 
     log(failedStep, false, msg);
     send({ progress, logs, error: msg });
+
+    sendPushToAll({
+      title: 'Import fehlgeschlagen ❌',
+      body: msg,
+      url: '/',
+    }).catch((err) => console.error('Failed to send push notification:', err));
 
     if (isSse && controller) {
       controller.close();
@@ -188,7 +162,7 @@ export async function POST(req: Request) {
       }
     }
 
-    const imageResponse = await fetch(imageUrl);
+    const imageResponse = await fetch(imageUrl, { signal: AbortSignal.timeout(60000) });
     if (!imageResponse.ok) {
       return new Response(JSON.stringify({ error: 'Bild konnte nicht geladen werden.' }), { status: 400 });
     }
