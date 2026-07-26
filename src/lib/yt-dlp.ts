@@ -99,8 +99,9 @@ async function getAudioFileBytes(url: string): Promise<Uint8Array> {
     } as any);
 
     return await audioFile.bytes();
-  } catch {
-    // ignore -> fallback
+  } catch (err: any) {
+    // Bevorzugtes Audio-Format nicht verfügbar -> Fallback versuchen, aber nicht stillschweigend verschlucken.
+    console.warn('Bevorzugtes Audio-Format fehlgeschlagen, versuche Fallback:', err?.message ?? err);
   }
 
   // 2) Fallback: best mit Audio (kann Video sein), dann extrahiert ffmpeg Audio falls vorhanden
@@ -171,6 +172,16 @@ export async function downloadMediaWithYtDlp(url: string): Promise<socialMediaRe
       console.warn('Instagram post without video detected.');
       throw new Error(
         'Instagram-Beitrag enthält kein Video. Bitte verwende einen Video-Post oder lade das Bild manuell hoch.'
+      );
+    }
+
+    if (rawMessage.includes('Instagram sent an empty media response') || rawMessage.includes('No csrf token set')) {
+      console.warn('Instagram returned an empty/unauthenticated media response.');
+      throw new Error(
+        'Instagram hat keine Mediendaten geliefert. Der Beitrag ist vermutlich nur eingeloggt abrufbar, oder yt-dlp ' +
+          'ist veraltet. Setze die Umgebungsvariable COOKIES auf einen gültigen Instagram-Session-Cookie ' +
+          '(z. B. "sessionid=DEIN_WERT") und stelle sicher, dass YTDLP_VERSION=latest ist, damit yt-dlp automatisch ' +
+          'aktuell gehalten wird.'
       );
     }
 

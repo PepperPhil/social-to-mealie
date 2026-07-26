@@ -33,11 +33,6 @@ export async function POST(req: Request) {
   u.searchParams.set('autostart', '1');
   
   return NextResponse.redirect(u, 303);
-  
-  // const u = new URL('/', req.url);
-  // u.searchParams.set('url', sharedUrl);
-  // u.searchParams.set('autostart', '1');
-  // return NextResponse.redirect(u, 303);
 }
 
 export async function GET(req: Request) {

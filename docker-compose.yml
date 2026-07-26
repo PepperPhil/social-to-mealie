@@ -18,6 +18,14 @@ services:
       # Optional, addition to the prompt, useful for translation needs remove if not needed
       - EXTRA_PROMPT=The description, ingredients, and instructions must be provided in Spanish
       - COOKIES= #Optional, cookie for yt-dlp requests, useful for protected content
+      # Optional, enables push notifications (e.g. "Rezept übertragen" when an import
+      # finishes in the background). Generate with: npx web-push generate-vapid-keys
+      - VAPID_PUBLIC_KEY=
+      - VAPID_PRIVATE_KEY=
+      - VAPID_SUBJECT=mailto:you@example.com
+    volumes:
+      # Persists push-notification subscriptions across container restarts
+      - ./data:/app/data
     ports:
       - 4000:3000
     security_opt:

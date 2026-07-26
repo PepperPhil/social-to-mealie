@@ -21,4 +21,8 @@ export const env: envTypes = {
     EXTRA_PROMPT: process.env.EXTRA_PROMPT?.trim() || ('' as string),
     COOKIES: process.env.COOKIES?.trim() || ('' as string),
     LOCAL_TRANSCRIPTION_MODEL: process.env.LOCAL_TRANSCRIPTION_MODEL?.trim() || ('' as string),
+    VAPID_PUBLIC_KEY: process.env.VAPID_PUBLIC_KEY?.trim() || ('' as string),
+    VAPID_PRIVATE_KEY: process.env.VAPID_PRIVATE_KEY?.trim() || ('' as string),
+    VAPID_SUBJECT: process.env.VAPID_SUBJECT?.trim() || ('mailto:admin@example.com' as string),
+    DATA_DIR: process.env.DATA_DIR?.trim() || ('./data' as string),
 };

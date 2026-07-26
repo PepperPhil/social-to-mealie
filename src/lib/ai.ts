@@ -129,13 +129,7 @@ Important:
 - Be conservative: do not invent exotic ingredients; keep it minimal and plausible.
 - If the description does not contain ingredient amounts, use reasonable standard amounts and make steps generic but useful.
 
-${
-  tags && tags.length > 0 && Array.isArray(tags) ? `<keywords>${tags.join(', ')}</keywords>` : ''
-}
-
-${
-  tags && (tags as any).length > 0 && !Array.isArray(tags) ? `<keywords>${String(tags)}</keywords>` : ''
-}
+${tags.length > 0 ? `<keywords>${tags.join(', ')}</keywords>` : ''}
 
 Use the thumbnail for the image field and the post URL for the url field.
 Extract ingredients and instructions clearly.

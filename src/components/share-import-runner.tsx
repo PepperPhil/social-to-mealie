@@ -106,6 +106,16 @@ export default function ShareImportRunner({
     }
   }
 
+  function markRunningStepsAsFailed() {
+    setSteps((prev) => {
+      const next = { ...prev };
+      (Object.keys(next) as StepKey[]).forEach((k) => {
+        if (next[k].status === 'running') next[k] = { ...next[k], status: 'fail' };
+      });
+      return next;
+    });
+  }
+
   async function startImport(url: string) {
     resetAll(url);
     log(`Import gestartet für: ${url}`);
@@ -113,59 +123,63 @@ export default function ShareImportRunner({
     try {
       const res = await fetch('/api/get-url', {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'Content-Type': 'text/event-stream' },
         body: JSON.stringify({ url, tags }),
       });
 
-      const data = await res.json().catch(() => ({} as any));
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error('No readable stream available');
 
-      if (!res.ok) {
-        const p = data?.progress as ApiProgress | undefined;
-        mapApiProgressToSteps(p);
+      const decoder = new TextDecoder();
+      let buffer = '';
 
-        setStatus('error');
-        const msg = data?.error ?? `Import fehlgeschlagen (HTTP ${res.status})`;
-        setErrorText(msg);
-        log(`FEHLER: ${msg}`);
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
 
-        // Wenn Backend “debug”/”details” liefert, zeigen
-        if (data?.details) log(`DETAILS: ${String(data.details)}`);
-        if (data?.stderr) log(`STDERR: ${String(data.stderr)}`);
+        buffer += decoder.decode(value, { stream: true });
+        const events = buffer.split('\n\n');
+        buffer = events.pop() ?? '';
 
-        // markiere laufende Steps als fail, damit UI nicht “hängt”
-        setSteps((prev) => {
-          const next = { ...prev };
-          (Object.keys(next) as StepKey[]).forEach((k) => {
-            if (next[k].status === 'running') next[k] = { ...next[k], status: 'fail' };
-          });
-          return next;
-        });
+        for (const event of events) {
+          if (!event.startsWith('data: ')) continue;
 
-        return;
+          const data = JSON.parse(event.slice(6));
+
+          mapApiProgressToSteps(data?.progress as ApiProgress | undefined);
+          if (Array.isArray(data?.logs)) {
+            const latest = data.logs[data.logs.length - 1];
+            if (latest?.message) log(latest.message);
+          }
+
+          if (data?.duplicate) {
+            setStatus('done');
+            log(`Rezept existiert bereits${data.recipe?.name ? `: „${data.recipe.name}"` : ''}.`);
+            setStep('download', { status: 'ok' });
+            setStep('convert', { status: 'ok' });
+            setStep('transcribe', { status: 'ok' });
+            setStep('recipe', { status: 'ok' });
+          } else if (data?.error) {
+            setStatus('error');
+            setErrorText(data.error);
+            log(`FEHLER: ${data.error}`);
+            markRunningStepsAsFailed();
+          } else if (data?.name) {
+            setStatus('done');
+            log('Rezept wurde in Mealie angelegt.');
+            setStep('download', { status: 'ok' });
+            setStep('convert', { status: 'ok' });
+            setStep('transcribe', { status: 'ok' });
+            setStep('recipe', { status: 'ok' });
+          }
+        }
       }
-
-      // Success
-      mapApiProgressToSteps(data?.progress as ApiProgress | undefined);
-
-      setStatus('done');
-      log('Rezept wurde in Mealie angelegt.');
-      setStep('download', { status: 'ok' });
-      setStep('convert', { status: 'ok' });
-      setStep('transcribe', { status: 'ok' });
-      setStep('recipe', { status: 'ok' });
     } catch (e: any) {
       setStatus('error');
       const msg = e?.message ? String(e.message) : 'Unbekannter Fehler';
       setErrorText(msg);
       log(`FEHLER (Exception): ${msg}`);
-
-      setSteps((prev) => {
-        const next = { ...prev };
-        (Object.keys(next) as StepKey[]).forEach((k) => {
-          if (next[k].status === 'running') next[k] = { ...next[k], status: 'fail' };
-        });
-        return next;
-      });
+      markRunningStepsAsFailed();
     }
   }
 

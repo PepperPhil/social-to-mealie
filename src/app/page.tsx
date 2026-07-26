@@ -1,6 +1,7 @@
 import { RecipeFetcher } from '@/components/recipe-fetcher';
 import GetTagSelect from '../components/tag-select/tag-fetch';
 import ShareImportRunner from '@/components/share-import-runner';
+import PushManager from '@/components/push-manager';
 
 export default async function Page({
   searchParams,
@@ -14,6 +15,8 @@ export default async function Page({
   return (
     <div className="flex flex-col items-center justify-center h-screen">
       <h1 className="text-3xl font-bold">Welcome to social to Mealie</h1>
+
+      <PushManager />
 
       {/* PWA Share-Import Runner: liest ?url=...&autostart=1 intern via AutoImport */}
       <ShareImportRunner tags={tags} />

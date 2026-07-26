@@ -48,7 +48,7 @@ export async function postRecipe(recipeData: any) {
             );
         }
         console.error('Error in postRecipe:', error);
-        throw new Error(error.message);
+        throw new Error(error?.message ?? String(error ?? 'Failed to create recipe'));
     }
 }
 
@@ -59,6 +59,7 @@ export async function getRecipe(recipeSlug: string): Promise<recipeResult> {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${env.MEALIE_API_KEY}`,
         },
+        signal: AbortSignal.timeout(30000),
     });
 
     const body = await res.json();
@@ -132,7 +133,7 @@ export async function postRecipeImage(image: Blob, filename: string, tags: strin
             );
         }
         console.error('Error in postRecipeImage:', error);
-        throw new Error(error.message);
+        throw new Error(error?.message ?? String(error ?? 'Failed to create recipe from image'));
     }
 }
 
@@ -199,6 +200,7 @@ async function fetchRecipeSearchResults(query: string) {
                 'Content-Type': 'application/json',
                 Authorization: `Bearer ${env.MEALIE_API_KEY}`,
             },
+            signal: AbortSignal.timeout(30000),
         });
 
         if (res.ok) {
